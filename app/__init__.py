@@ -1,0 +1,1 @@
+"""Aplicação Genius Agenda AI."""

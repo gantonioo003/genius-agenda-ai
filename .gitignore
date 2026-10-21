@@ -218,3 +218,20 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Genius Agenda AI local data
+.env.*
+!.env.example
+secrets/
+credentials*.json
+client_secret*.json
+token*.json
+data/
+.n8n/
+n8n_data/
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
