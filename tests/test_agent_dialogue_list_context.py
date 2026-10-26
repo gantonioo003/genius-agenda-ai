@@ -17,7 +17,7 @@ class DialogueListContextTests(unittest.TestCase):
 
     def memory(self, *, listed=True):
         return QueryMemory(last_list={'date': '2030-06-17', 'period': 'day', 'time_zone': legacy.ZONE} if listed else None,
-            selected_event_id='UnrelatedOldSelection', selected_time_zone=legacy.ZONE,
+            selected_event_id='UnrelatedOldSelection' if listed else None, selected_time_zone=legacy.ZONE if listed else None,
             pending_request=PendingRequest({}, ('event',)))
 
     def set_events(self, count=1):
@@ -31,8 +31,8 @@ class DialogueListContextTests(unittest.TestCase):
         self.assertEqual((result.status, result.action), ('ready', 'edit'))
         self.assertEqual(result.data['parameters']['description'], NOTES)
         self.assertEqual(result.data['parameters']['event_id'], 'FixtureExact0')
-        self.assertEqual([call[0] for call in self.gateway.calls], ['list', 'get'])
-        self.assertEqual(self.gateway.calls[0][1].start.date().isoformat(), '2030-06-17')
+        self.assertEqual([call[0] for call in self.gateway.calls], ['get', 'list', 'get'])
+        self.assertEqual(next(call for call in self.gateway.calls if call[0] == 'list')[1].start.date().isoformat(), '2030-06-17')
         self.assertFalse(result.data['execution_allowed'])
         self.assertEqual(memory.pending_request.fields['description'], NOTES)
 
@@ -64,7 +64,7 @@ class DialogueListContextTests(unittest.TestCase):
         self.assertEqual(len(result.data['candidates']), 2)
         self.assertEqual(len(memory.pending_request.candidates), 2)
         self.assertIsNone(result.data['parameters'])
-        self.assertEqual([call[0] for call in self.gateway.calls], ['list'])
+        self.assertEqual([call[0] for call in self.gateway.calls], ['get', 'list'])
 
     def test_explicit_ambiguous_date_or_multiple_requests_never_borrows_context(self):
         self.model.plan = legacy.plan(action='edit', search_title=TITLE, description=NOTES, ambiguous_field='date')
@@ -82,7 +82,7 @@ class DialogueListContextTests(unittest.TestCase):
         result, _ = self.service.respond(MESSAGE, self.memory())
         self.assertEqual(result.status, 'ready')
         self.assertEqual(result.data['parameters']['event_id'], 'FixtureExact0')
-        self.assertEqual([call[0] for call in self.gateway.calls], ['list', 'get'])
+        self.assertEqual([call[0] for call in self.gateway.calls], ['get', 'list', 'get'])
         self.assertTrue(self.model.plan.arguments['use_selected_event'])
         # Uma ambiguidade já apresentada continua exigindo escolha explícita.
         from app.dialogue_state import CandidateReference

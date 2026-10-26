@@ -31,7 +31,7 @@ class LiteralMutationTests(unittest.TestCase):
         self.assertEqual(result.data['parameters']['start'], '2026-10-26T16:45:00-03:00')
         self.assertEqual(result.data['parameters']['end'], '2026-10-26T17:15:00-03:00')
         self.assertFalse(result.data['execution_allowed'])
-        self.assertEqual([call[0] for call in self.gateway.calls], ['list', 'get'])
+        self.assertEqual([call[0] for call in self.gateway.calls], ['get', 'list', 'get'])
 
     def test_complete_reschedule_without_zone_survives_unavailable_model(self):
         from unittest.mock import patch

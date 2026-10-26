@@ -47,9 +47,9 @@ Configure a chave da API, OAuth Google, Gemini, destinatário autorizado e callb
 .\.venv\Scripts\python.exe -m unittest discover -s tests
 ```
 
-Última suíte completa anterior às correções finais: **2.394 testes Python aprovados**. Correções finais: **360 testes focados aprovados**. **981 verificações JavaScript históricas**; os conjuntos não são somados.
+Última suíte Python completa após a revisão de reagendamentos: **2.438 testes aprovados**. **981 verificações JavaScript históricas**; os conjuntos não são somados. [Reagendamentos sucessivos: correção e validação](docs/reagendamentos-sucessivos.md).
 
-O acervo local conserva **173 registros: 44 imagens e 129 JSON**. Capturas originais, testes automatizados, aceites do provedor e recebimento humano são provas distintas. [Índice público dos resultados](docs/evidencias.md) · [Ensaio real](docs/ensaio-real-whatsapp.md).
+O acervo local conserva **175 registros: 45 imagens e 130 JSON**. Capturas originais, testes automatizados, aceites do provedor e recebimento humano são provas distintas. [Índice público dos resultados](docs/evidencias.md) · [Ensaio real](docs/ensaio-real-whatsapp.md).
 
 ## Limitações
 
@@ -57,4 +57,4 @@ Ambiente de teste local, com um destinatário no sandbox. Serviços e computador
 
 ## Entrega
 
-Etapas 1–14 e 16 concluídas no escopo documentado. Próxima: vídeo e conferência final da entrega. [Roteiro curto](docs/roteiro-video.md) · [Fechamento da qualidade](docs/fechamento-etapa-16.md).
+Etapas 1–14 e 16 concluídas no escopo documentado. Vídeo demonstrativo enviado ao recrutador em 26/10/2026; a revisão de reagendamentos foi feita após essa gravação. [Roteiro curto](docs/roteiro-video.md) · [Fechamento da qualidade](docs/fechamento-etapa-16.md).

@@ -487,3 +487,8 @@ Os registros **163/164** comprovam a repetição real corrigida: consulta legív
 
 
 Os registros **165–173** encerram a etapa 16: perguntas corrigidas, CRUD real completo, card e texto reais recebidos, exclusão e cancelamento conferidos, segurança revisada e versão final com **360 testes focados**. A suíte completa anterior permanece **2.394**; não houve nova execução integral. Acervo final: **173 registros, 44 imagens e 129 JSON**. [Fechamento](fechamento-etapa-16.md).
+
+
+## Reagendamentos sucessivos
+
+Captura privada 174 do relato original e relatório 175 da suíte atual. [Resultado, escopo e limites](reagendamentos-sucessivos.md). Acervo atualizado: 175 registros, 45 imagens e 130 JSON.

@@ -69,6 +69,12 @@ se isso não responder a uma pergunta pendente, use ask_dialogue unclear_answer.
 Pedidos múltiplos exigem ask_dialogue multiple_requests. Peça um pedido por vez.
 Para criar use title/start/end/time_zone/description; list usa date/period/time_zone;
 reschedule usa seletor e start/end; edit usa seletor e title/description/location;
+No reagendamento, date/period identificam o compromisso ATUAL; start/end são o
+DESTINO pedido. A data do destino não deve substituir a data da busca atual.
+Se a pergunta pendente pede qual evento usar e a resposta traz título/data/horários
+do evento atual, complete somente o seletor e conserve start/end já conhecidos.
+Só altere o destino se a mensagem pedir explicitamente outro horário ou corrigir
+o início/término. Nunca converta os horários do evento identificado em novo destino;
 delete usa apenas seletor. Para seleção, use event_id literal da mensagem atual OU
 search_title e date/period. Não misture essas formas. Para 'esse evento' sem ID,
 use use_selected_event somente se o resumo indicar uma seleção de leitura disponível.
@@ -187,6 +193,38 @@ def _last_list_selector(fields, memory):
         fields.setdefault('period', memory.last_list['period'])
         fields.setdefault('time_zone', memory.last_list['time_zone'])
     return fields
+
+
+
+def _awaiting_reschedule_event(pending):
+    return (pending is not None and pending.fields.get('action') == 'reschedule'
+            and bool(pending.awaiting) and set(pending.awaiting) <= {'event', 'title', 'date', 'period'}
+            and all(pending.fields.get(name) for name in ('start', 'end')))
+
+
+def _event_summary_line(message):
+    """Reconhecer uma identificação copiada da prévia, incluindo seus horários atuais."""
+    hour = r'(?:[0-9]{1,2}h(?:[0-9]{2})?|[0-9]{2}:[0-9]{2})'
+    return re.fullmatch(r'.+?\s+[—–-]\s+(?:(?:hoje|amanha),?\s*)?'
+        r'[0-9]{2}/[0-9]{2}/[0-9]{4},?\s+(?:das\s+)?' + hour
+        + r'\s+(?:as|a)\s+' + hour + r'(?:\s*[·|]\s*horario de .+)?', _plain(message)) is not None
+
+
+def _preserve_reschedule_target(message, pending, patch):
+    """Uma resposta de identificação não muda o destino já informado."""
+    if not _awaiting_reschedule_event(pending):
+        return patch
+    plain = _plain(message)
+    correction = (not _event_summary_line(message) and (
+        re.match(r'^(?:(?:eu\s+)?(?:quero|gostaria|preciso|pode|poderia|podemos|vamos)'
+                 r'(?:\s+(?:de|que|voce))*\s+)?'
+                 r'(?:reagend\w*|remar\w*|mov[ae]\w*|mud[ae]\w*|troqu\w*|corrig\w*|corrij\w*)\b', plain)
+        or re.match(r'^(?:para|as|(?:o |a )?(?:inicio|fim|termino|novo horario|nova data|horario correto|horario certo)'
+                    r'|na verdade|quis dizer|comeca|termina)\b', plain)))
+    if correction:
+        return patch
+    return {name: value for name, value in patch.items() if name not in {'start', 'end'}}
+
 
 
 def _literal_explicit_mutation(message, memory, default_zone, clock):
@@ -477,10 +515,15 @@ class AgentDialogueService:
         # fresca, as validações e a confirmação continuam no preparador comum.
         literal = _literal_explicit_mutation(message, memory, self._time_zone, self._clock)
         if literal is not None and literal['action'] == 'reschedule':
-            return self._prepare(_last_list_selector(literal, memory), memory)
-        if literal is not None and literal['action'] == 'delete':
-            return self._prepare_literal_delete(literal, memory)
-        plan = _validated_plan(self._model.plan_dialogue(instructions=self._instructions(memory), message=message))
+            return self._prepare_title_mutation(literal, memory)
+        try:
+            plan = _validated_plan(self._model.plan_dialogue(instructions=self._instructions(memory), message=message))
+        except ModelError:
+            # A gramática restrita de exclusão só recupera falha de interpretação;
+            # planos válidos por ID ou seleção explícita mantêm o caminho original.
+            if literal is not None and literal['action'] == 'delete':
+                return self._prepare_title_mutation(literal, memory)
+            raise
         pending = memory.pending_request
         action = pending.fields.get('action') if pending is not None else None
         if plan.name == 'cancel_request':
@@ -490,15 +533,18 @@ class AgentDialogueService:
             return validate_dialogue_result(result), replace(memory, pending_request=None)
         if plan.name == 'ask_dialogue':
             literal = _literal_explicit_mutation(message, memory, self._time_zone, self._clock)
+            if (literal is not None and literal['action'] == 'delete'
+                    and plan.arguments['reason'] == 'unsupported_request'):
+                return self._prepare_title_mutation(literal, memory)
             if (literal is not None
                     and (plan.arguments['reason'] == 'unclear_answer'
                          and plan.arguments['field'] in {'event', 'title', 'date', 'request'}
                          or plan.arguments['reason'] == 'ambiguous_information' and plan.arguments['field'] in {'event', 'request'})):
-                fields = _last_list_selector(literal, memory)
+                fields = dict(literal)
                 fields.setdefault('time_zone', self._time_zone)
                 # Passar pelo preparador existente refaz list/get e conserva
                 # múltiplos candidatos como pergunta, mesmo havendo seleção antiga.
-                return self._prepare(fields, memory)
+                return self._prepare_title_mutation(fields, memory)
             result = _question(plan.arguments['reason'], plan.arguments['field'], action=action)
             fields = dict(pending.fields) if pending is not None else {}
             ambiguous = None
@@ -515,6 +561,9 @@ class AgentDialogueService:
         if plan.name == 'select_candidate':
             return self._select(message, memory, plan.arguments['choice'])
         args = plan.arguments
+        if (_awaiting_reschedule_event(pending) and _event_summary_line(message)
+                and args['action'] in {None, 'reschedule'}):
+            args = dict(args, mode='continue')
         if args['mode'] == 'continue' and pending is None:
             return self._keep_question(memory, _question('missing_information', 'request'))
         if args['mode'] == 'continue' and args['action'] is not None and action is not None and args['action'] != action:
@@ -524,6 +573,8 @@ class AgentDialogueService:
             # atual. É necessário escolher uma das opções que foram apresentadas.
             return self._keep_question(memory, _question('event_selection', 'event', action=action))
         patch = {name: value for name, value in args.items() if name in _FIELDS and value is not None}
+        if args['mode'] == 'continue':
+            patch = _preserve_reschedule_target(message, pending, patch)
         literal = _literal_explicit_mutation(message, memory, self._time_zone, self._clock)
         if (literal is not None and literal['action'] != 'delete'
                 and patch.get('action', literal['action']) == literal['action'] and args['ambiguous_field'] is None):
@@ -555,8 +606,6 @@ class AgentDialogueService:
         elif set(patch) & {'search_title', 'date', 'period'}:
             fields.pop('event_id', None)
         fields.update(patch)
-        if not args['use_selected_event'] and args['ambiguous_field'] is None:
-            _last_list_selector(fields, memory)
         if args['mode'] == 'continue' and fields.get('action') == 'create' and 'date' in patch:
             # Alterar a âncora exige novos horários absolutos. Conservar apenas
             # start/end que foram extraídos da própria mensagem deste turno.
@@ -589,12 +638,21 @@ class AgentDialogueService:
             next_pending = validate_pending_request(PendingRequest(fields, ('time_zone',)))
             return validate_dialogue_result(result), replace(memory, pending_request=next_pending)
         validate_pending_request(PendingRequest(fields))
-        return self._prepare(fields, memory)
+        return self._prepare_title_mutation(fields, memory)
 
-    def _prepare_literal_delete(self, fields, memory):
+    def _prepare_title_mutation(self, fields, memory):
         # Um reagendamento pode mover o evento para fora da última consulta.
         # O ID lembrado orienta somente a data da busca, nunca desempata títulos.
         fields = dict(fields)
+        action = fields.get('action')
+        if action not in {'edit', 'reschedule', 'delete'} or not fields.get('search_title') or fields.get('event_id'):
+            return self._prepare(fields, memory)
+        if not fields.get('date'):
+            # Dados inválidos ou outros campos ausentes são esclarecidos antes
+            # de depender de uma leitura externa para recuperar apenas a data.
+            checked = RequestPreparationService(_ValidationGateway(), default_time_zone=self._time_zone).prepare(fields)
+            if checked.invalid_fields or set(checked.missing_fields) - {'date'}:
+                return self._prepare(fields, memory)
         if not fields.get('date') and memory.selected_event_id is not None:
             zone_name = fields.get('time_zone', self._time_zone)
             try:
@@ -604,13 +662,19 @@ class AgentDialogueService:
                 if (event is not None and event.event_id == memory.selected_event_id
                         and event.status in {'confirmed', 'tentative'}
                         and normalized_title(event.title) == normalized_title(fields['search_title'])):
-                    start = (date.fromisoformat(event.start) if event.all_day else
-                             datetime.fromisoformat(event.start).astimezone(load_zone(zone_name)).date())
-                    fields.update(date=start.isoformat(), period='day')
+                    if event.all_day:
+                        current_day = date.fromisoformat(event.start)
+                    else:
+                        current_start = datetime.fromisoformat(event.start)
+                        if current_start.utcoffset() is None:
+                            raise ValueError('Horário atual sem fuso.')
+                        current_day = current_start.astimezone(load_zone(zone_name)).date()
+                    fields['date'] = current_day.isoformat()
+                    fields.setdefault('period', memory.last_list['period'] if memory.last_list is not None else 'day')
             except CalendarSetupError:
-                return DialogueResult('failed', 'delete', 'O acesso à agenda está indisponível.', None, 503, 'calendar_setup_unavailable'), memory
+                return DialogueResult('failed', action, 'O acesso à agenda está indisponível.', None, 503, 'calendar_setup_unavailable'), memory
             except Exception:
-                return DialogueResult('failed', 'delete', 'Não foi possível conferir o compromisso antes da exclusão.', None, 502, 'operation_failed'), memory
+                return DialogueResult('failed', action, 'Não foi possível conferir o compromisso antes de continuar.', None, 502, 'operation_failed'), memory
         return self._prepare(_last_list_selector(fields, memory), memory)
 
     def _keep_question(self, memory, result, *, clear_candidates=False):
