@@ -1,0 +1,814 @@
+{
+  "api_version": "1",
+  "implemented": false,
+  "scope": "Catálogo de 16 pedidos e respostas FICTÍCIOS e PLANEJADOS para o contrato HTTP v1; não são capturas, execuções nem chamadas reais de HTTP, Google ou n8n. As rotas ainda não existem. Cenários independentes, com dados de demonstração em 17/06/2030, America/Recife. Configure Authorization: Bearer na configuração privada somente quando a proteção for implementada na parte 2; credenciais foram omitidas de todos os exemplos, e o caso 401 representa explicitamente sua ausência. X-Request-ID correlaciona cada tentativa e não deduplica; operation_id é estável entre tentativas da mesma criação. DEMO_TOKEN_DA_PREVIA_NAO_EXECUTAVEL é um marcador fictício inválido para execução: no sistema real use o token de versão recebido da prévia, somente após confirmação explícita. O marcador não autentica nem comprova consentimento. Links usam example.invalid; IDs não pertencem a eventos reais. ready não executa nem reserva. Uma falha com mutation_state unknown exige conferência, sem reenvio automático da mutação. Somente ready pode conter parameters. Consultas e prévias não alteram eventos, mas podem atualizar metadados locais no SQLite. O workflow não escolhe calendar_id ou user_id arbitrários.",
+  "cases": [
+    {
+      "name": "preparar_criacao_incompleta",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/requests/prepare",
+        "headers": {
+          "X-Request-ID": "demo-http-001",
+          "Accept": "application/json",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "request": {
+            "action": "create",
+            "title": "Entrevista técnica fictícia",
+            "time_zone": "America/Recife"
+          }
+        }
+      },
+      "response": {
+        "http_status": 200,
+        "body": {
+          "api_version": "1",
+          "request_id": "demo-http-001",
+          "operation_id": null,
+          "status": "needs_clarification",
+          "action": "create",
+          "mutation_state": "not_applied",
+          "message": "Faltam informações para preparar o compromisso.",
+          "data": {
+            "reason": "missing_information",
+            "question": "Para continuar, informe a data e o horário de início, a data e o horário de término.",
+            "missing_fields": [
+              "start",
+              "end"
+            ],
+            "invalid_fields": [],
+            "event": null,
+            "candidates": [],
+            "parameters": null
+          },
+          "error": null
+        },
+        "headers": {
+          "Content-Type": "application/json",
+          "X-Request-ID": "demo-http-001"
+        }
+      }
+    },
+    {
+      "name": "preparar_criacao_pronta_sem_executar",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/requests/prepare",
+        "headers": {
+          "X-Request-ID": "demo-http-002",
+          "Accept": "application/json",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "request": {
+            "action": "create",
+            "title": "Entrevista técnica fictícia",
+            "start": "2030-06-17T10:00:00-03:00",
+            "end": "2030-06-17T10:30:00-03:00",
+            "time_zone": "America/Recife",
+            "description": "Preparar portfólio de demonstração."
+          }
+        }
+      },
+      "response": {
+        "http_status": 200,
+        "body": {
+          "api_version": "1",
+          "request_id": "demo-http-002",
+          "operation_id": null,
+          "status": "ready",
+          "action": "create",
+          "mutation_state": "not_applied",
+          "message": "Pedido preparado. Nenhum evento foi criado ou reservado.",
+          "data": {
+            "reason": null,
+            "question": null,
+            "missing_fields": [],
+            "invalid_fields": [],
+            "event": null,
+            "candidates": [],
+            "parameters": {
+              "title": "Entrevista técnica fictícia",
+              "start": "2030-06-17T10:00:00-03:00",
+              "end": "2030-06-17T10:30:00-03:00",
+              "time_zone": "America/Recife",
+              "description": "Preparar portfólio de demonstração."
+            }
+          },
+          "error": null
+        },
+        "headers": {
+          "Content-Type": "application/json",
+          "X-Request-ID": "demo-http-002"
+        }
+      }
+    },
+    {
+      "name": "consultar_eventos_day",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/events",
+        "headers": {
+          "X-Request-ID": "demo-http-003",
+          "Accept": "application/json"
+        },
+        "query": {
+          "date": "2030-06-17",
+          "period": "day",
+          "time_zone": "America/Recife"
+        }
+      },
+      "response": {
+        "http_status": 200,
+        "body": {
+          "api_version": "1",
+          "request_id": "demo-http-003",
+          "operation_id": null,
+          "status": "succeeded",
+          "action": "list",
+          "mutation_state": "not_applicable",
+          "message": "Consulta concluída.",
+          "data": {
+            "calendar_name": "Genius Testes",
+            "period": {
+              "start": "2030-06-17T00:00:00-03:00",
+              "end": "2030-06-18T00:00:00-03:00",
+              "time_zone": "America/Recife"
+            },
+            "events": [
+              {
+                "event_id": "geniusdemo001",
+                "title": "Entrevista técnica fictícia",
+                "start": "2030-06-17T10:00:00-03:00",
+                "end": "2030-06-17T10:30:00-03:00",
+                "all_day": false,
+                "time_zone": "America/Recife",
+                "status": "confirmed",
+                "html_link": "https://example.invalid/events/geniusdemo001"
+              }
+            ]
+          },
+          "error": null
+        },
+        "headers": {
+          "Content-Type": "application/json",
+          "X-Request-ID": "demo-http-003"
+        }
+      }
+    },
+    {
+      "name": "consultar_eventos_week",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/events",
+        "headers": {
+          "X-Request-ID": "demo-http-004",
+          "Accept": "application/json"
+        },
+        "query": {
+          "date": "2030-06-17",
+          "period": "week",
+          "time_zone": "America/Recife"
+        }
+      },
+      "response": {
+        "http_status": 200,
+        "body": {
+          "api_version": "1",
+          "request_id": "demo-http-004",
+          "operation_id": null,
+          "status": "succeeded",
+          "action": "list",
+          "mutation_state": "not_applicable",
+          "message": "Consulta concluída.",
+          "data": {
+            "calendar_name": "Genius Testes",
+            "period": {
+              "start": "2030-06-17T00:00:00-03:00",
+              "end": "2030-06-24T00:00:00-03:00",
+              "time_zone": "America/Recife"
+            },
+            "events": [
+              {
+                "event_id": "geniusdemo001",
+                "title": "Entrevista técnica fictícia",
+                "start": "2030-06-17T10:00:00-03:00",
+                "end": "2030-06-17T10:30:00-03:00",
+                "all_day": false,
+                "time_zone": "America/Recife",
+                "status": "confirmed",
+                "html_link": "https://example.invalid/events/geniusdemo001"
+              }
+            ]
+          },
+          "error": null
+        },
+        "headers": {
+          "Content-Type": "application/json",
+          "X-Request-ID": "demo-http-004"
+        }
+      }
+    },
+    {
+      "name": "consultar_eventos_month",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/events",
+        "headers": {
+          "X-Request-ID": "demo-http-005",
+          "Accept": "application/json"
+        },
+        "query": {
+          "date": "2030-06-17",
+          "period": "month",
+          "time_zone": "America/Recife"
+        }
+      },
+      "response": {
+        "http_status": 200,
+        "body": {
+          "api_version": "1",
+          "request_id": "demo-http-005",
+          "operation_id": null,
+          "status": "succeeded",
+          "action": "list",
+          "mutation_state": "not_applicable",
+          "message": "Consulta concluída.",
+          "data": {
+            "calendar_name": "Genius Testes",
+            "period": {
+              "start": "2030-06-01T00:00:00-03:00",
+              "end": "2030-07-01T00:00:00-03:00",
+              "time_zone": "America/Recife"
+            },
+            "events": [
+              {
+                "event_id": "geniusdemo001",
+                "title": "Entrevista técnica fictícia",
+                "start": "2030-06-17T10:00:00-03:00",
+                "end": "2030-06-17T10:30:00-03:00",
+                "all_day": false,
+                "time_zone": "America/Recife",
+                "status": "confirmed",
+                "html_link": "https://example.invalid/events/geniusdemo001"
+              }
+            ]
+          },
+          "error": null
+        },
+        "headers": {
+          "Content-Type": "application/json",
+          "X-Request-ID": "demo-http-005"
+        }
+      }
+    },
+    {
+      "name": "consultar_id_ausente",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/events/geniusdemoausente001",
+        "headers": {
+          "X-Request-ID": "demo-http-006",
+          "Accept": "application/json"
+        },
+        "query": {
+          "time_zone": "America/Recife"
+        }
+      },
+      "response": {
+        "http_status": 404,
+        "body": {
+          "api_version": "1",
+          "request_id": "demo-http-006",
+          "operation_id": null,
+          "status": "not_found",
+          "action": "get",
+          "mutation_state": "not_applicable",
+          "message": "O evento não foi encontrado.",
+          "data": {
+            "calendar_name": "Genius Testes",
+            "event": null
+          },
+          "error": {
+            "code": "event_not_found",
+            "retryable": false,
+            "fields": [
+              "event_id"
+            ]
+          }
+        },
+        "headers": {
+          "Content-Type": "application/json",
+          "X-Request-ID": "demo-http-006"
+        }
+      }
+    },
+    {
+      "name": "criar_evento_novo",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/events",
+        "headers": {
+          "X-Request-ID": "demo-http-007",
+          "Accept": "application/json",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "operation_id": "demo-intencao-entrevista-20300617-001",
+          "event": {
+            "title": "Entrevista técnica fictícia",
+            "start": "2030-06-17T10:00:00-03:00",
+            "end": "2030-06-17T10:30:00-03:00",
+            "time_zone": "America/Recife",
+            "description": "Preparar portfólio de demonstração."
+          }
+        }
+      },
+      "response": {
+        "http_status": 201,
+        "body": {
+          "api_version": "1",
+          "request_id": "demo-http-007",
+          "operation_id": "demo-intencao-entrevista-20300617-001",
+          "status": "succeeded",
+          "action": "create",
+          "mutation_state": "confirmed",
+          "message": "Criação confirmada.",
+          "data": {
+            "event_id": "geniusdemo001",
+            "html_link": "https://example.invalid/events/geniusdemo001",
+            "calendar_name": "Genius Testes",
+            "reused": false,
+            "recovered": false
+          },
+          "error": null
+        },
+        "headers": {
+          "Content-Type": "application/json",
+          "X-Request-ID": "demo-http-007"
+        }
+      }
+    },
+    {
+      "name": "repetir_criacao_reutiliza_mesmo_evento",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/events",
+        "headers": {
+          "X-Request-ID": "demo-http-008",
+          "Accept": "application/json",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "operation_id": "demo-intencao-entrevista-20300617-001",
+          "event": {
+            "title": "Entrevista técnica fictícia",
+            "start": "2030-06-17T10:00:00-03:00",
+            "end": "2030-06-17T10:30:00-03:00",
+            "time_zone": "America/Recife",
+            "description": "Preparar portfólio de demonstração."
+          }
+        }
+      },
+      "response": {
+        "http_status": 200,
+        "body": {
+          "api_version": "1",
+          "request_id": "demo-http-008",
+          "operation_id": "demo-intencao-entrevista-20300617-001",
+          "status": "succeeded",
+          "action": "create",
+          "mutation_state": "confirmed",
+          "message": "Evento existente reutilizado; nenhum segundo evento foi criado.",
+          "data": {
+            "event_id": "geniusdemo001",
+            "html_link": "https://example.invalid/events/geniusdemo001",
+            "calendar_name": "Genius Testes",
+            "reused": true,
+            "recovered": false
+          },
+          "error": null
+        },
+        "headers": {
+          "Content-Type": "application/json",
+          "X-Request-ID": "demo-http-008"
+        }
+      }
+    },
+    {
+      "name": "criacao_bloqueada_por_conflito_tipado",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/events",
+        "headers": {
+          "X-Request-ID": "demo-http-009",
+          "Accept": "application/json",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "operation_id": "demo-intencao-conflitante-20300617-002",
+          "event": {
+            "title": "Outra entrevista fictícia",
+            "start": "2030-06-17T10:15:00-03:00",
+            "end": "2030-06-17T10:45:00-03:00",
+            "time_zone": "America/Recife",
+            "description": "Preparar portfólio de demonstração."
+          }
+        }
+      },
+      "response": {
+        "http_status": 409,
+        "body": {
+          "api_version": "1",
+          "request_id": "demo-http-009",
+          "operation_id": "demo-intencao-conflitante-20300617-002",
+          "status": "conflict",
+          "action": "create",
+          "mutation_state": "not_applied",
+          "message": "O intervalo solicitado conflita com outro compromisso.",
+          "data": {
+            "status": "conflict",
+            "calendar_name": "Genius Testes",
+            "start": "2030-06-17T10:15:00-03:00",
+            "end": "2030-06-17T10:45:00-03:00",
+            "time_zone": "America/Recife",
+            "conflicts": [
+              {
+                "event_id": "geniusdemo001",
+                "title": "Entrevista técnica fictícia",
+                "start": "2030-06-17T10:00:00-03:00",
+                "end": "2030-06-17T10:30:00-03:00",
+                "all_day": false,
+                "time_zone": "America/Recife",
+                "status": "confirmed",
+                "html_link": "https://example.invalid/events/geniusdemo001"
+              }
+            ]
+          },
+          "error": {
+            "code": "schedule_conflict",
+            "retryable": false,
+            "fields": []
+          }
+        },
+        "headers": {
+          "Content-Type": "application/json",
+          "X-Request-ID": "demo-http-009"
+        }
+      }
+    },
+    {
+      "name": "criacao_com_resultado_ainda_incerto",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/events",
+        "headers": {
+          "X-Request-ID": "demo-http-010",
+          "Accept": "application/json",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "operation_id": "demo-intencao-incerta-20300617-003",
+          "event": {
+            "title": "Entrevista fictícia com resultado incerto",
+            "start": "2030-06-17T14:00:00-03:00",
+            "end": "2030-06-17T14:30:00-03:00",
+            "time_zone": "America/Recife",
+            "description": "Preparar portfólio de demonstração."
+          }
+        }
+      },
+      "response": {
+        "http_status": 502,
+        "body": {
+          "api_version": "1",
+          "request_id": "demo-http-010",
+          "operation_id": "demo-intencao-incerta-20300617-003",
+          "status": "failed",
+          "action": "create",
+          "mutation_state": "unknown",
+          "message": "Não foi possível confirmar o resultado. Confira o estado antes de decidir qualquer novo envio.",
+          "data": {
+            "event_id": null
+          },
+          "error": {
+            "code": "operation_not_confirmed",
+            "retryable": false,
+            "fields": []
+          }
+        },
+        "headers": {
+          "Content-Type": "application/json",
+          "X-Request-ID": "demo-http-010"
+        }
+      }
+    },
+    {
+      "name": "reagendar_horario_confirmado",
+      "request": {
+        "method": "PATCH",
+        "path": "/api/v1/events/geniusdemo001/schedule",
+        "headers": {
+          "X-Request-ID": "demo-http-011",
+          "Accept": "application/json",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "start": "2030-06-17T11:00:00-03:00",
+          "end": "2030-06-17T11:30:00-03:00",
+          "time_zone": "America/Recife"
+        }
+      },
+      "response": {
+        "http_status": 200,
+        "body": {
+          "api_version": "1",
+          "request_id": "demo-http-011",
+          "operation_id": null,
+          "status": "succeeded",
+          "action": "reschedule",
+          "mutation_state": "confirmed",
+          "message": "Reagendamento confirmado.",
+          "data": {
+            "calendar_name": "Genius Testes",
+            "before": {
+              "event_id": "geniusdemo001",
+              "title": "Entrevista técnica fictícia",
+              "start": "2030-06-17T10:00:00-03:00",
+              "end": "2030-06-17T10:30:00-03:00",
+              "all_day": false,
+              "time_zone": "America/Recife",
+              "status": "confirmed",
+              "html_link": "https://example.invalid/events/geniusdemo001"
+            },
+            "after": {
+              "event_id": "geniusdemo001",
+              "title": "Entrevista técnica fictícia",
+              "start": "2030-06-17T11:00:00-03:00",
+              "end": "2030-06-17T11:30:00-03:00",
+              "all_day": false,
+              "time_zone": "America/Recife",
+              "status": "confirmed",
+              "html_link": "https://example.invalid/events/geniusdemo001"
+            },
+            "requested_start": "2030-06-17T11:00:00-03:00",
+            "requested_end": "2030-06-17T11:30:00-03:00",
+            "time_zone": "America/Recife",
+            "recovered": false,
+            "result": "rescheduled"
+          },
+          "error": null
+        },
+        "headers": {
+          "Content-Type": "application/json",
+          "X-Request-ID": "demo-http-011"
+        }
+      }
+    },
+    {
+      "name": "editar_local_preservando_demais_informacoes",
+      "request": {
+        "method": "PATCH",
+        "path": "/api/v1/events/geniusdemo001",
+        "headers": {
+          "X-Request-ID": "demo-http-012",
+          "Accept": "application/json",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "changes": {
+            "location": "Sala virtual de demonstração"
+          },
+          "time_zone": "America/Recife"
+        }
+      },
+      "response": {
+        "http_status": 200,
+        "body": {
+          "api_version": "1",
+          "request_id": "demo-http-012",
+          "operation_id": null,
+          "status": "succeeded",
+          "action": "edit",
+          "mutation_state": "confirmed",
+          "message": "Informações atualizadas e conferidas.",
+          "data": {
+            "calendar_name": "Genius Testes",
+            "before": {
+              "event_id": "geniusdemo001",
+              "title": "Entrevista técnica fictícia",
+              "start": "2030-06-17T11:00:00-03:00",
+              "end": "2030-06-17T11:30:00-03:00",
+              "all_day": false,
+              "time_zone": "America/Recife",
+              "status": "confirmed",
+              "html_link": "https://example.invalid/events/geniusdemo001",
+              "description": "Preparar portfólio de demonstração.",
+              "location": ""
+            },
+            "after": {
+              "event_id": "geniusdemo001",
+              "title": "Entrevista técnica fictícia",
+              "start": "2030-06-17T11:00:00-03:00",
+              "end": "2030-06-17T11:30:00-03:00",
+              "all_day": false,
+              "time_zone": "America/Recife",
+              "status": "confirmed",
+              "html_link": "https://example.invalid/events/geniusdemo001",
+              "description": "Preparar portfólio de demonstração.",
+              "location": "Sala virtual de demonstração"
+            },
+            "requested": {
+              "location": "Sala virtual de demonstração"
+            },
+            "recovered": false,
+            "result": "updated"
+          },
+          "error": null
+        },
+        "headers": {
+          "Content-Type": "application/json",
+          "X-Request-ID": "demo-http-012"
+        }
+      }
+    },
+    {
+      "name": "obter_previa_da_exclusao_sem_excluir",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/events/geniusdemo001/deletion-preview",
+        "headers": {
+          "X-Request-ID": "demo-http-013",
+          "Accept": "application/json",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "time_zone": "America/Recife"
+        }
+      },
+      "response": {
+        "http_status": 200,
+        "body": {
+          "api_version": "1",
+          "request_id": "demo-http-013",
+          "operation_id": null,
+          "status": "needs_confirmation",
+          "action": "delete",
+          "mutation_state": "not_applied",
+          "message": "Confira o compromisso e solicite a confirmação explícita do usuário antes de excluir.",
+          "data": {
+            "calendar_name": "Genius Testes",
+            "event": {
+              "event_id": "geniusdemo001",
+              "title": "Entrevista técnica fictícia",
+              "start": "2030-06-17T11:00:00-03:00",
+              "end": "2030-06-17T11:30:00-03:00",
+              "all_day": false,
+              "time_zone": "America/Recife",
+              "status": "confirmed",
+              "html_link": "https://example.invalid/events/geniusdemo001"
+            },
+            "confirmation_token": "DEMO_TOKEN_DA_PREVIA_NAO_EXECUTAVEL",
+            "question": "Confirma excluir \"Entrevista técnica fictícia\" de 17/06/2030 às 11h00 até 11h30? Confira os dados antes de confirmar.",
+            "result": "needs_confirmation"
+          },
+          "error": null
+        },
+        "headers": {
+          "Content-Type": "application/json",
+          "X-Request-ID": "demo-http-013"
+        }
+      }
+    },
+    {
+      "name": "excluir_apos_confirmacao_explicita_e_token_da_previa",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/events/geniusdemo001/delete",
+        "headers": {
+          "X-Request-ID": "demo-http-014",
+          "Accept": "application/json",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "confirmation_token": "DEMO_TOKEN_DA_PREVIA_NAO_EXECUTAVEL",
+          "time_zone": "America/Recife"
+        }
+      },
+      "response": {
+        "http_status": 200,
+        "body": {
+          "api_version": "1",
+          "request_id": "demo-http-014",
+          "operation_id": null,
+          "status": "succeeded",
+          "action": "delete",
+          "mutation_state": "confirmed",
+          "message": "Exclusão confirmada por consulta posterior.",
+          "data": {
+            "calendar_name": "Genius Testes",
+            "event_id": "geniusdemo001",
+            "result": "deleted",
+            "recovered": false
+          },
+          "error": null
+        },
+        "headers": {
+          "Content-Type": "application/json",
+          "X-Request-ID": "demo-http-014"
+        }
+      }
+    },
+    {
+      "name": "rejeitar_credencial_da_propria_api_ausente",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/events",
+        "headers": {
+          "X-Request-ID": "demo-http-015",
+          "Accept": "application/json",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "operation_id": "demo-intencao-entrevista-20300617-001",
+          "event": {
+            "title": "Entrevista técnica fictícia",
+            "start": "2030-06-17T10:00:00-03:00",
+            "end": "2030-06-17T10:30:00-03:00",
+            "time_zone": "America/Recife",
+            "description": "Preparar portfólio de demonstração."
+          }
+        }
+      },
+      "response": {
+        "http_status": 401,
+        "body": {
+          "api_version": "1",
+          "request_id": "demo-http-015",
+          "operation_id": null,
+          "status": "failed",
+          "action": null,
+          "mutation_state": "not_applied",
+          "message": "Autenticação necessária para acessar a API.",
+          "data": null,
+          "error": {
+            "code": "unauthorized",
+            "retryable": false,
+            "fields": []
+          }
+        },
+        "headers": {
+          "Content-Type": "application/json",
+          "X-Request-ID": "demo-http-015"
+        }
+      }
+    },
+    {
+      "name": "rejeitar_criacao_sem_identificador_de_operacao",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/events",
+        "headers": {
+          "X-Request-ID": "demo-http-016",
+          "Accept": "application/json",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "event": {
+            "title": "Entrevista técnica fictícia",
+            "start": "2030-06-17T10:00:00-03:00",
+            "end": "2030-06-17T10:30:00-03:00",
+            "time_zone": "America/Recife",
+            "description": "Preparar portfólio de demonstração."
+          }
+        }
+      },
+      "response": {
+        "http_status": 422,
+        "body": {
+          "api_version": "1",
+          "request_id": "demo-http-016",
+          "operation_id": null,
+          "status": "failed",
+          "action": "create",
+          "mutation_state": "not_applied",
+          "message": "Informe os campos obrigatórios no formato esperado.",
+          "data": null,
+          "error": {
+            "code": "invalid_request",
+            "retryable": false,
+            "fields": [
+              "operation_id"
+            ]
+          }
+        },
+        "headers": {
+          "Content-Type": "application/json",
+          "X-Request-ID": "demo-http-016"
+        }
+      }
+    }
+  ]
+}

@@ -288,10 +288,10 @@ class DailyQueryTests(unittest.TestCase):
     def test_timed_results_are_normalized_sorted_and_deduplicated(self):
         early = timed_event("early", "2026-10-22T12:00:00Z", "2026-10-22T12:30:00Z")
         late = timed_event("late", "2026-10-22T20:00:00+02:00", "2026-10-22T20:30:00+02:00")
-        duplicate = timed_event("duplicate", "2026-10-22T13:00:00Z", "2026-10-22T13:30:00Z")
-        revised = timed_event(
+        duplicate = timed_event(
             "duplicate", "2026-10-22T14:00:00Z", "2026-10-22T14:30:00Z", summary="Versão atual"
         )
+        revised = dict(duplicate)  # Mesma versão repetida entre páginas.
         self.request.execute.side_effect = [
             {"items": [late, duplicate], "nextPageToken": "second"},
             {"items": [early, revised]},

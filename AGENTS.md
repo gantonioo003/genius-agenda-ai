@@ -11,3 +11,5 @@
 - Após cada marco, atualizar os registros em `docs/` e o resumo do README conforme o resultado observado. Testes locais, resposta de API e conferência visual são evidências distintas.
 
 Preferência solicitada pelo usuário em 21/10/2026: manter documentação textual e visual continuamente durante o desenvolvimento.
+
+Preferência complementada em 22/10/2026: Prints somente quando acrescentarem evidência visual útil; não produzir captura para cada microtarefa. Para validações de API e regras, usar resultados reais de testes/HTTP em texto ou JSON quando comprovarem melhor o resultado, mantendo o índice atualizado.

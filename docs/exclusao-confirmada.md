@@ -42,7 +42,7 @@ O código identifica a versão conferida; não é uma credencial, assinatura de 
 
 Eventos comuns com horário, eventos de dia inteiro e uma ocorrência específica de série são aceitos. Uma série inteira e tipos especiais de evento são rejeitados. A operação não cria outro evento nem altera outros campos. A prévia lê somente os campos necessários, sem descrição ou local.
 
-O serviço fica em `app/services/event_deletion.py`, o adaptador em `app/google_calendar.py` e a interface de terminal em `app/delete_event.py`. São componentes independentes do modelo de IA. O comando ainda não está exposto por HTTP, n8n ou WhatsApp.
+O serviço fica em `app/services/event_deletion.py`, o adaptador em `app/google_calendar.py` e a interface de terminal em `app/delete_event.py`. São componentes independentes do modelo de IA. A operação também foi exposta pela [API HTTP na etapa 09, parte 6](exclusao-api.md). As integrações n8n e WhatsApp permanecem pendentes.
 
 ## Verificação
 
@@ -57,3 +57,6 @@ Os **23 testes novos** cobrem confirmação obrigatória e validação antes de 
 A revisão do conjunto encerrou a etapa 07. Consulte as entregas, evidências e limites no [registro de fechamento](fechamento-etapa-07.md).
 
 Referências: [DELETE de eventos](https://developers.google.com/workspace/calendar/api/v3/reference/events/delete) e [versões de recursos e If-Match](https://developers.google.com/workspace/calendar/api/guides/version-resources).
+
+
+**Atualização na etapa 08, parte 6:** uma resposta de escrita perdida ou inválida agora é conferida por leitura do mesmo ID. O resultado inclui `recovered: true` quando essa leitura confirma o estado esperado; se a conferência falhar, permanece um erro seguro, sem nova escrita automática. Os registros e limites estão no [guia de falhas e recuperação](falhas-recuperacao.md).

@@ -302,19 +302,27 @@ class EventDetailsGoogleTests(unittest.TestCase):
     def test_write_timeout_transport_or_5xx_is_uncertain_without_retry(self):
         for failure in (TimeoutError("fake write timeout"), TransportError("fake transport"),
                         google_error(500), google_error(503)):
-            with self.subTest(failure=type(failure).__name__, text=str(failure)):
-                self.client.reset_mock()
-                self.patch_request.execute.side_effect = failure
-                with self.assertRaisesRegex(CalendarOperationError, "pode ter sido aplicada"):
-                    self.gateway.update_event_details("TargetID", DetailsChange(title=NEW_TITLE), execute=True)
-                self.events.patch.assert_called_once()
-                self.patch_request.execute.assert_called_once_with(num_retries=0)
-                self.get_request.execute.assert_called_once_with(num_retries=2)
+            for saved in (False, True):
+                with self.subTest(failure=type(failure).__name__, saved=saved):
+                    self.client.reset_mock()
+                    after = raw_event(summary=NEW_TITLE) if saved else raw_event()
+                    self.get_request.execute.side_effect = [raw_event(), after]
+                    self.patch_request.execute.side_effect = failure
+                    if saved:
+                        result = self.gateway.update_event_details("TargetID", DetailsChange(title=NEW_TITLE), execute=True)
+                        self.assertTrue(result.recovered)
+                        self.assertEqual(result.status, "updated")
+                    else:
+                        with self.assertRaisesRegex(CalendarOperationError, "pode ter sido aplicada"):
+                            self.gateway.update_event_details("TargetID", DetailsChange(title=NEW_TITLE), execute=True)
+                    self.events.patch.assert_called_once()
+                    self.patch_request.execute.assert_called_once_with(num_retries=0)
+                    self.assertEqual(self.get_request.execute.call_count, 2)
 
     def test_bad_patch_response_or_failed_postwrite_get_never_confirms(self):
         cases = (
-            (None, raw_event(summary=NEW_TITLE), 1),
-            ({"id": "WrongID"}, raw_event(summary=NEW_TITLE), 1),
+            (None, raw_event(summary=NEW_TITLE), 2),
+            ({"id": "WrongID"}, raw_event(summary=NEW_TITLE), 2),
             ({"id": "TargetID"}, TimeoutError("fake postwrite timeout"), 2),
             ({"id": "TargetID"}, google_error(404), 2),
             ({"id": "TargetID"}, google_error(503), 2),
@@ -324,8 +332,14 @@ class EventDetailsGoogleTests(unittest.TestCase):
                 self.client.reset_mock()
                 self.patch_request.execute.return_value = response
                 self.get_request.execute.side_effect = [raw_event(), after]
-                with self.assertRaisesRegex(CalendarOperationError, "pode ter sido aplicada"):
-                    self.gateway.update_event_details("TargetID", DetailsChange(title=NEW_TITLE), execute=True)
+                if response != {"id": "TargetID"}:
+                    result = self.gateway.update_event_details("TargetID", DetailsChange(title=NEW_TITLE), execute=True)
+                    self.assertTrue(result.recovered)
+                    self.assertEqual(result.status, "updated")
+                else:
+                    with self.assertRaisesRegex(CalendarOperationError, "pode ter sido aplicada"):
+                        self.gateway.update_event_details("TargetID", DetailsChange(title=NEW_TITLE), execute=True)
+                self.events.patch.assert_called_once()
                 self.patch_request.execute.assert_called_once_with(num_retries=0)
                 self.assertEqual(self.get_request.execute.call_count, get_count)
 

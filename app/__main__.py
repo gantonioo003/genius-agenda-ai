@@ -11,4 +11,5 @@ if __name__ == "__main__":
         host=settings.api_host,
         port=settings.api_port,
         log_level=settings.log_level,
+        access_log=False,
     )

@@ -1,0 +1,324 @@
+{
+  "schema_version": 1,
+  "status": "criteria_only",
+  "synthetic_examples": true,
+  "contract": "functional-contract.json",
+  "cases": [
+    {
+      "case_id": "scope-01",
+      "capability": "summarize_agenda",
+      "message": "Resume minha semana.",
+      "fixture": "complete_week",
+      "expected_functional_decision": "ready",
+      "required_assertions": [
+        "period_and_totals_from_backend",
+        "label_elapsed_events"
+      ],
+      "expected_calendar_writes": 0,
+      "executed": false
+    },
+    {
+      "case_id": "scope-02",
+      "capability": "summarize_agenda",
+      "message": "Resume meu mês.",
+      "fixture": "complete_empty_month",
+      "expected_functional_decision": "ready",
+      "required_assertions": [
+        "empty_only_after_complete_read"
+      ],
+      "expected_calendar_writes": 0,
+      "executed": false
+    },
+    {
+      "case_id": "scope-03",
+      "capability": "summarize_agenda",
+      "message": "O que tenho de importante na semana?",
+      "fixture": "no_priority_given",
+      "expected_functional_decision": "needs_clarification",
+      "required_assertions": [
+        "ask_priority_or_offer_explicit_factual_criterion",
+        "no_invented_priority"
+      ],
+      "expected_calendar_writes": 0,
+      "executed": false
+    },
+    {
+      "case_id": "scope-04",
+      "capability": "summarize_agenda",
+      "message": "Resume minha semana.",
+      "fixture": "second_page_failed",
+      "expected_functional_decision": "unavailable",
+      "required_assertions": [
+        "no_final_totals",
+        "not_empty"
+      ],
+      "expected_calendar_writes": 0,
+      "executed": false
+    },
+    {
+      "case_id": "scope-05",
+      "capability": "summarize_agenda",
+      "message": "Resume minha semana.",
+      "fixture": "model_failed_after_complete_read",
+      "expected_functional_decision": "ready",
+      "required_assertions": [
+        "label_deterministic_fallback",
+        "no_model_claim"
+      ],
+      "expected_calendar_writes": 0,
+      "executed": false
+    },
+    {
+      "case_id": "scope-06",
+      "capability": "summarize_agenda",
+      "message": "Resume o mês.",
+      "fixture": "all_day_and_expanded_recurrence",
+      "expected_functional_decision": "ready",
+      "required_assertions": [
+        "no_fabricated_time",
+        "occurrences_not_series_duplicate"
+      ],
+      "expected_calendar_writes": 0,
+      "executed": false
+    },
+    {
+      "case_id": "scope-07",
+      "capability": "find_free_slots",
+      "message": "Quando tenho um espaço livre?",
+      "fixture": "missing_window_and_duration",
+      "expected_functional_decision": "needs_clarification",
+      "required_assertions": [
+        "ask_window_and_duration",
+        "no_assumed_working_hours"
+      ],
+      "expected_calendar_writes": 0,
+      "executed": false
+    },
+    {
+      "case_id": "scope-08",
+      "capability": "find_free_slots",
+      "message": "Quais horários de 30 minutos em 18/06/2030 entre 9h e 12h?",
+      "fixture": "complete_occupancy_with_constraints",
+      "expected_functional_decision": "ready",
+      "required_assertions": [
+        "at_most_three_future_options",
+        "authorized_calendar_only",
+        "zero_buffer_labelled"
+      ],
+      "expected_calendar_writes": 0,
+      "executed": false
+    },
+    {
+      "case_id": "scope-09",
+      "capability": "find_free_slots",
+      "message": "Tenho horário livre amanhã cedo?",
+      "fixture": "missing_daily_window",
+      "expected_functional_decision": "needs_clarification",
+      "required_assertions": [
+        "no_assumed_morning_range"
+      ],
+      "expected_calendar_writes": 0,
+      "executed": false
+    },
+    {
+      "case_id": "scope-10",
+      "capability": "find_free_slots",
+      "message": "Sugere 30 minutos amanhã entre 9h e 12h.",
+      "fixture": "opaque_all_day_event",
+      "expected_functional_decision": "ready",
+      "required_assertions": [
+        "no_slot_within_busy_day",
+        "no_global_unavailability_claim"
+      ],
+      "expected_calendar_writes": 0,
+      "executed": false
+    },
+    {
+      "case_id": "scope-11",
+      "capability": "find_free_slots",
+      "message": "Sugere 30 minutos amanhã entre 9h e 12h.",
+      "fixture": "tentative_opaque_and_transparent_events",
+      "expected_functional_decision": "ready",
+      "required_assertions": [
+        "reuse_conflicts_for_busy_flags",
+        "do_not_infer_from_minimal_list"
+      ],
+      "expected_calendar_writes": 0,
+      "executed": false
+    },
+    {
+      "case_id": "scope-12",
+      "capability": "find_free_slots",
+      "message": "Sugere 30 minutos amanhã entre 9h e 12h.",
+      "fixture": "occupancy_page_limit_hit",
+      "expected_functional_decision": "unavailable",
+      "required_assertions": [
+        "no_free_slot_claim",
+        "ask_smaller_period"
+      ],
+      "expected_calendar_writes": 0,
+      "executed": false
+    },
+    {
+      "case_id": "scope-13",
+      "capability": "suggest_reschedule",
+      "message": "Sugere outro horário para a entrevista amanhã.",
+      "fixture": "two_event_candidates",
+      "expected_functional_decision": "needs_clarification",
+      "required_assertions": [
+        "no_automatic_event_selection"
+      ],
+      "expected_calendar_writes": 0,
+      "executed": false
+    },
+    {
+      "case_id": "scope-14",
+      "capability": "suggest_reschedule",
+      "message": "Sugere outro horário para essa entrevista amanhã entre 9h e 12h.",
+      "fixture": "unique_timed_event",
+      "expected_functional_decision": "ready",
+      "required_assertions": [
+        "preserve_current_duration",
+        "exclude_exact_occurrence_only",
+        "no_calendar_write"
+      ],
+      "expected_calendar_writes": 0,
+      "executed": false
+    },
+    {
+      "case_id": "scope-15",
+      "capability": "suggest_reschedule",
+      "message": "Usa a primeira opção.",
+      "fixture": "slot_snapshot_is_stale_or_ordinal_ambiguous",
+      "expected_functional_decision": "needs_clarification",
+      "required_assertions": [
+        "selection_not_approval",
+        "explicit_mutation_request_then_recheck"
+      ],
+      "expected_calendar_writes": 0,
+      "executed": false
+    },
+    {
+      "case_id": "scope-16",
+      "capability": "prepare_briefing",
+      "message": "Me prepara para a próxima entrevista.",
+      "fixture": "unique_event_without_company_or_role",
+      "expected_functional_decision": "ready",
+      "required_assertions": [
+        "generic_advice_labelled",
+        "unknowns_explicit",
+        "no_company_or_role_invention"
+      ],
+      "expected_calendar_writes": 0,
+      "executed": false
+    },
+    {
+      "case_id": "scope-17",
+      "capability": "prepare_briefing",
+      "message": "Me prepara para essa entrevista.",
+      "fixture": "description_contains_override_and_external_url",
+      "expected_functional_decision": "ready",
+      "required_assertions": [
+        "treat_description_as_data",
+        "no_browsing",
+        "no_secret_or_tool_instruction_execution"
+      ],
+      "expected_calendar_writes": 0,
+      "executed": false
+    },
+    {
+      "case_id": "scope-18",
+      "capability": "prepare_briefing",
+      "message": "Me prepara para essa entrevista amanhã.",
+      "fixture": "event_date_disagrees_with_message",
+      "expected_functional_decision": "needs_clarification",
+      "required_assertions": [
+        "ask_about_discrepancy",
+        "no_implicit_edit"
+      ],
+      "expected_calendar_writes": 0,
+      "executed": false
+    },
+    {
+      "case_id": "scope-19",
+      "capability": "prepare_briefing",
+      "message": "Me prepara para essa entrevista.",
+      "fixture": "model_changes_time_or_cites_unknown_reference",
+      "expected_functional_decision": "invalid_output",
+      "required_assertions": [
+        "discard_invalid_narrative",
+        "use_verified_facts_or_generic_labelled_fallback"
+      ],
+      "expected_calendar_writes": 0,
+      "executed": false
+    },
+    {
+      "case_id": "scope-20",
+      "capability": "build_checklist",
+      "message": "O que preparo para essa entrevista?",
+      "fixture": "unique_event_with_supplied_notes",
+      "expected_functional_decision": "ready",
+      "required_assertions": [
+        "at_most_six_actions",
+        "facts_separate_from_suggestions",
+        "no_task_completion_claim"
+      ],
+      "expected_calendar_writes": 0,
+      "executed": false
+    },
+    {
+      "case_id": "scope-21",
+      "capability": "build_checklist",
+      "message": "O que preparo para essa entrevista?",
+      "fixture": "model_unavailable_after_valid_event_read",
+      "expected_functional_decision": "ready",
+      "required_assertions": [
+        "generic_template_labelled",
+        "no_false_personalization"
+      ],
+      "expected_calendar_writes": 0,
+      "executed": false
+    },
+    {
+      "case_id": "scope-22",
+      "capability": "summarize_agenda",
+      "message": "Resume minha semana.",
+      "fixture": "unconsumed_old_delete_proposal",
+      "expected_functional_decision": "ready",
+      "required_assertions": [
+        "cas_revoke_old_proposal_with_notice",
+        "preserve_draft",
+        "no_generic_approval_question"
+      ],
+      "expected_calendar_writes": 0,
+      "executed": false
+    },
+    {
+      "case_id": "scope-23",
+      "capability": "summarize_agenda",
+      "message": "Resume minha semana.",
+      "fixture": "old_proposal_revocation_cas_failed",
+      "expected_functional_decision": "unavailable",
+      "required_assertions": [
+        "no_stale_approval_reuse",
+        "no_approval_question",
+        "do_not_clear_running_unknown"
+      ],
+      "expected_calendar_writes": 0,
+      "executed": false
+    },
+    {
+      "case_id": "scope-24",
+      "capability": "suggest_reschedule",
+      "message": "Sim.",
+      "fixture": "informational_reply_no_current_action_proposal",
+      "expected_functional_decision": "needs_clarification",
+      "required_assertions": [
+        "no_previous_mutation_or_suggestion_execution",
+        "ask_explicit_request"
+      ],
+      "expected_calendar_writes": 0,
+      "executed": false
+    }
+  ]
+}

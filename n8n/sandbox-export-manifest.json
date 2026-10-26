@@ -1,0 +1,18 @@
+{
+  "verified_at_utc": "2026-10-25T14:28:58.847084+00:00",
+  "workflow_file": "workflows/whatsapp-sandbox.json",
+  "name": "Genius Agenda AI - WhatsApp com agente",
+  "sha256": "a6663e0583c40b205724be208095beceb588f3dc7788a5898e8b8c9548dd91e2",
+  "node_count": 7,
+  "public_export_active": false,
+  "installed_nodes_match_after_removing_credential_ids": true,
+  "installed_connections_match": true,
+  "required_settings_match": true,
+  "published_version_checked_with_cli": true,
+  "previous_three_public_exports_preserved": true,
+  "credential_references": [
+    "Genius API - local",
+    "Genius WhatsApp Sandbox - entrada"
+  ],
+  "scope": "Metadados e UUID para ativação autenticada da fila; worker Python usa agente, contexto e serviços existentes e envia resposta ao destinatário privado. queued não comprova execução ou entrega."
+}

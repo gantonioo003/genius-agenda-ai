@@ -1,0 +1,233 @@
+{
+  "scope": "Casos FICTÍCIOS para demonstrar apenas a apresentação das respostas. Não são resultados HTTP nem execuções de Google, n8n, IA ou WhatsApp. Nenhuma operação é executada. IDs, datas, link example.invalid e token de confirmação pertencem somente a estes exemplos e não servem para confirmar eventos reais.",
+  "cases": [
+    {
+      "name": "duvida_sobre_data_e_horario",
+      "input": {
+        "statusCode": 200,
+        "body": {
+          "api_version": "1",
+          "request_id": "demo-request-001",
+          "operation_id": null,
+          "status": "needs_clarification",
+          "action": "create",
+          "mutation_state": "not_applied",
+          "message": "Mensagem técnica fictícia.",
+          "data": {
+            "reason": "missing_information",
+            "question": "Qual data e horário?",
+            "missing_fields": [
+              "start",
+              "end"
+            ],
+            "invalid_fields": [],
+            "event": null,
+            "candidates": [],
+            "parameters": null
+          },
+          "error": null
+        }
+      },
+      "context": {
+        "action": "create",
+        "phase": "prepare",
+        "request_id": "demo-request-001"
+      },
+      "expected_kind": "question",
+      "expected_next_step": "provide_details"
+    },
+    {
+      "name": "conflito_de_horario",
+      "input": {
+        "statusCode": 409,
+        "body": {
+          "api_version": "1",
+          "request_id": "demo-request-001",
+          "operation_id": "demo-intencao-1",
+          "status": "conflict",
+          "action": "create",
+          "mutation_state": "not_applied",
+          "message": "Mensagem técnica fictícia.",
+          "data": {
+            "status": "conflict",
+            "calendar_name": "Agenda fictícia",
+            "start": "2030-06-17T10:00:00-03:00",
+            "end": "2030-06-17T10:30:00-03:00",
+            "time_zone": "America/Recife",
+            "conflicts": [
+              {
+                "event_id": "evento-ficticio-1",
+                "title": "Entrevista fictícia",
+                "start": "2030-06-17T10:00:00-03:00",
+                "end": "2030-06-17T10:30:00-03:00",
+                "all_day": false,
+                "time_zone": "America/Recife",
+                "status": "confirmed",
+                "html_link": "https://example.invalid/evento"
+              }
+            ]
+          },
+          "error": {
+            "code": "schedule_conflict",
+            "retryable": false,
+            "fields": []
+          }
+        }
+      },
+      "context": {
+        "action": "create",
+        "phase": "execute",
+        "request_id": "demo-request-001"
+      },
+      "expected_kind": "conflict",
+      "expected_next_step": "choose_another_time"
+    },
+    {
+      "name": "confirmacao_antes_de_excluir",
+      "input": {
+        "statusCode": 200,
+        "body": {
+          "api_version": "1",
+          "request_id": "demo-request-001",
+          "operation_id": null,
+          "status": "needs_confirmation",
+          "action": "delete",
+          "mutation_state": "not_applied",
+          "message": "Mensagem técnica fictícia.",
+          "data": {
+            "calendar_name": "Agenda fictícia",
+            "event": {
+              "event_id": "evento-ficticio-1",
+              "title": "Entrevista fictícia",
+              "start": "2030-06-17T10:00:00-03:00",
+              "end": "2030-06-17T10:30:00-03:00",
+              "all_day": false,
+              "time_zone": "America/Recife",
+              "status": "confirmed",
+              "html_link": "https://example.invalid/evento"
+            },
+            "confirmation_token": "0000000000000000000000000000000000000000000000000000000000000000",
+            "question": "Confirma excluir a entrevista fictícia?",
+            "result": "needs_confirmation"
+          },
+          "error": null
+        }
+      },
+      "context": {
+        "action": "delete",
+        "phase": "preview",
+        "request_id": "demo-request-001"
+      },
+      "expected_kind": "confirmation",
+      "expected_next_step": "confirm_selected_event"
+    },
+    {
+      "name": "resultado_de_criacao_incerto",
+      "input": {
+        "statusCode": 502,
+        "body": {
+          "api_version": "1",
+          "request_id": "demo-request-001",
+          "operation_id": "demo-intencao-1",
+          "status": "failed",
+          "action": "create",
+          "mutation_state": "unknown",
+          "message": "Mensagem técnica fictícia.",
+          "data": null,
+          "error": {
+            "code": "operation_not_confirmed",
+            "retryable": false,
+            "fields": []
+          }
+        }
+      },
+      "context": {
+        "action": "create",
+        "phase": "execute",
+        "request_id": "demo-request-001"
+      },
+      "expected_kind": "uncertain",
+      "expected_next_step": "verify_state"
+    },
+    {
+      "name": "preparado_sem_executar",
+      "input": {
+        "statusCode": 200,
+        "body": {
+          "api_version": "1",
+          "request_id": "demo-request-001",
+          "operation_id": null,
+          "status": "ready",
+          "action": "create",
+          "mutation_state": "not_applied",
+          "message": "Mensagem técnica fictícia.",
+          "data": {
+            "reason": null,
+            "question": null,
+            "missing_fields": [],
+            "invalid_fields": [],
+            "event": null,
+            "candidates": [],
+            "parameters": {
+              "title": "Entrevista fictícia",
+              "start": "2030-06-17T10:00:00-03:00",
+              "end": "2030-06-17T10:30:00-03:00",
+              "time_zone": "America/Recife"
+            }
+          },
+          "error": null
+        }
+      },
+      "context": {
+        "action": "create",
+        "phase": "prepare",
+        "request_id": "demo-request-001"
+      },
+      "expected_kind": "prepared",
+      "expected_next_step": "await_requested_action"
+    },
+    {
+      "name": "consulta_concluida",
+      "input": {
+        "statusCode": 200,
+        "body": {
+          "api_version": "1",
+          "request_id": "demo-request-001",
+          "operation_id": null,
+          "status": "succeeded",
+          "action": "list",
+          "mutation_state": "not_applicable",
+          "message": "Mensagem técnica fictícia.",
+          "data": {
+            "calendar_name": "Agenda fictícia",
+            "period": {
+              "start": "2030-06-17T00:00:00-03:00",
+              "end": "2030-06-18T00:00:00-03:00",
+              "time_zone": "America/Recife"
+            },
+            "events": [
+              {
+                "event_id": "evento-ficticio-1",
+                "title": "Entrevista fictícia",
+                "start": "2030-06-17T10:00:00-03:00",
+                "end": "2030-06-17T10:30:00-03:00",
+                "all_day": false,
+                "time_zone": "America/Recife",
+                "status": "confirmed",
+                "html_link": "https://example.invalid/evento"
+              }
+            ]
+          },
+          "error": null
+        }
+      },
+      "context": {
+        "action": "list",
+        "phase": "read",
+        "request_id": "demo-request-001"
+      },
+      "expected_kind": "success",
+      "expected_next_step": "done"
+    }
+  ]
+}

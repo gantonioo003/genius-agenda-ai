@@ -5,10 +5,12 @@ from dataclasses import asdict
 import json
 import sys
 
-from google.auth.exceptions import TransportError
 from googleapiclient.errors import HttpError
-import httplib2
 
+from app.cli_errors import (
+    AUTH_ERRORS, LOCAL_STORE_ERRORS, NETWORK_ERRORS,
+    authentication_failure, local_store_failure,
+)
 from app.google_calendar import CalendarSetupError, GoogleCalendarGateway, calendar_client
 from app.list_events import parse_date
 from app.services.agenda import day_period, month_period, week_period
@@ -48,7 +50,11 @@ def main(argv: list[str] | None = None) -> int:
         print(str(exc), file=sys.stderr)
     except HttpError as exc:
         print(f"Google recusou a identificação (HTTP {exc.resp.status}).", file=sys.stderr)
-    except (OSError, httplib2.HttpLib2Error, TransportError):
+    except AUTH_ERRORS:
+        print(authentication_failure(), file=sys.stderr)
+    except LOCAL_STORE_ERRORS:
+        print(local_store_failure(), file=sys.stderr)
+    except NETWORK_ERRORS:
         print("Não foi possível consultar o Google. Confira a conexão e a configuração.", file=sys.stderr)
     return 1
 

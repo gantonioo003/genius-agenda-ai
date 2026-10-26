@@ -1,0 +1,16 @@
+{
+  "kind": "illustrative_requests_not_captured_responses",
+  "data": "Datas e identificadores fictícios; executar exige autenticação privada.",
+  "agent_query": [
+    {"message": "Quais entrevistas tenho em 17 de junho de 2030?"},
+    {"message": "Consulte minhas entrevistas da semana de 17 de junho de 2030."},
+    {"message": "Quais entrevistas tenho em junho de 2030?"},
+    {"message": "Consulte o evento EVENTO_FICTICIO_A."},
+    {"message": "Quero consultar a agenda, mas ainda não escolhi a data."}
+  ],
+  "prepare_request": [
+    {"request": {"action": "list", "date": "2030-06-17", "period": "month", "time_zone": "America/Recife"}},
+    {"request": {"action": "create", "title": "Entrevista fictícia", "start": "2030-06-17T10:00:00-03:00", "end": "2030-06-17T10:30:00-03:00", "time_zone": "America/Recife"}},
+    {"request": {"action": "delete", "event_id": "EVENTO_FICTICIO_A", "time_zone": "America/Recife"}}
+  ]
+}

@@ -1,0 +1,355 @@
+{
+  "name": "Genius Agenda AI - Verificação periódica de lembretes",
+  "active": false,
+  "nodes": [
+    {
+      "id": "lembretes-disparo-periodico",
+      "name": "Verificar a cada minuto",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "lembretes-preparar-tick",
+      "name": "Preparar tick",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        0
+      ],
+      "parameters": {
+        "jsCode": "function prepareReminderTick(executionId) {\n  const id = typeof executionId === 'string' ? executionId :\n    Number.isSafeInteger(executionId) && executionId >= 0 ? String(executionId) : '';\n  const requestId = 'reminder-tick-' + id;\n  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(id) ||\n      !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(requestId)) {\n    throw new Error('reminder_tick_invalid_request_id');\n  }\n  return {request_id: requestId};\n}\nreturn [{json: prepareReminderTick($execution.id)}];\n"
+      }
+    },
+    {
+      "id": "lembretes-solicitar-tick",
+      "name": "Solicitar verificacao protegida",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1060,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/api/v1/reminders/tick",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Request-ID",
+              "value": "={{ $json.request_id }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "{}",
+        "options": {
+          "redirect": {
+            "redirect": {
+              "followRedirects": false
+            }
+          },
+          "timeout": 120000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "credentials": {
+        "httpBearerAuth": {
+          "name": "Genius API - local"
+        }
+      },
+      "retryOnFail": false,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "lembretes-resumo-seguro",
+      "name": "Validar resumo seguro",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1340,
+        0
+      ],
+      "parameters": {
+        "jsCode": "function normalizeReminderTick(input, requestId) {\n  const fail = () => { throw new Error('reminder_tick_invalid_response'); };\n  const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);\n  const exact = (value, keys) => object(value) && Object.keys(value).length === keys.length &&\n    keys.every(key => Object.hasOwn(value, key));\n  const count = value => Number.isSafeInteger(value) && value >= 0;\n  const states = ['pending', 'blocked', 'reserved', 'sending', 'accepted', 'uncertain', 'cancelled', 'expired'];\n  const counts = value => object(value) && Object.keys(value).every(key => states.includes(key) && count(value[key]));\n  const syncKeys = ['status', 'events_checked', 'tracked_reminders', 'reminders_considered',\n    'cancelled_count', 'replanned_count', 'unchanged_count', 'state_counts'];\n  const generationKeys = ['status', 'events_seen', 'eligible_events', 'skipped_count',\n    'reminders_considered', 'state_counts'];\n  const summary = (value, keys, statuses) => exact(value, keys) && statuses.includes(value.status) &&\n    keys.filter(key => !['status', 'state_counts'].includes(key)).every(key => count(value[key])) && counts(value.state_counts);\n  const emptySummary = value => Object.entries(value).every(([key, item]) =>\n    key === 'status' || (key === 'state_counts' ? Object.keys(item).length === 0 : item === 0));\n  const cloneSummary = value => ({...value, state_counts: {...value.state_counts}});\n  if (typeof requestId !== 'string' || !/^reminder-tick-[A-Za-z0-9][A-Za-z0-9._-]*$/.test(requestId) ||\n      requestId.length > 128 || !object(input) || ![200, 503].includes(input.statusCode)) return fail();\n  const body = input.body;\n  if (!exact(body, ['api_version', 'request_id', 'operation_id', 'status', 'action',\n    'mutation_state', 'message', 'data', 'error']) || body.api_version !== '1' ||\n    body.request_id !== requestId || body.operation_id !== null || body.action !== 'reminder_tick' ||\n    body.mutation_state !== 'not_applicable' || typeof body.message !== 'string' ||\n    body.message.length === 0 || body.message.length > 2000) return fail();\n  const data = body.data;\n  if (!exact(data, ['tick_status', 'skip_reason', 'local_mutation_state', 'synchronization',\n    'generation', 'messages_sent', 'external_mutations']) || data.messages_sent !== 0 ||\n    data.external_mutations !== 0 ||\n    !summary(data.synchronization, syncKeys, ['not_run', 'synchronized', 'failed']) ||\n    !summary(data.generation, generationKeys, ['not_run', 'planned', 'failed'])) return fail();\n  if (input.statusCode === 503) {\n    const partial = data.tick_status === 'partial';\n    if (body.status !== 'failed' || !['failed', 'partial'].includes(data.tick_status) ||\n        data.skip_reason !== null || data.local_mutation_state !== (partial ? 'partial' : 'not_applied') ||\n        !exact(body.error, ['code', 'retryable', 'fields']) ||\n        body.error.code !== (partial ? 'reminder_tick_partial' : 'reminder_tick_failed') ||\n        body.error.retryable !== false || !Array.isArray(body.error.fields) || body.error.fields.length !== 0 ||\n        (partial && (data.synchronization.status !== 'synchronized' || !['failed', 'planned'].includes(data.generation.status))) ||\n        (!partial && (!['not_run', 'failed'].includes(data.synchronization.status) || data.generation.status !== 'not_run'))) return fail();\n    throw new Error(partial ? 'reminder_tick_partial' : 'reminder_tick_failed');\n  }\n  if (body.error !== null) return fail();\n  if (data.tick_status === 'completed') {\n    if (body.status !== 'succeeded' || data.skip_reason !== null || data.local_mutation_state !== 'applied' ||\n        data.synchronization.status !== 'synchronized' || data.generation.status !== 'planned') return fail();\n  } else if (data.tick_status === 'skipped') {\n    if (body.status !== 'skipped' || !['not_configured', 'disabled', 'permission_required', 'busy'].includes(data.skip_reason) ||\n        data.local_mutation_state !== 'not_applied' || data.synchronization.status !== 'not_run' ||\n        data.generation.status !== 'not_run' || !emptySummary(data.synchronization) || !emptySummary(data.generation)) return fail();\n  } else return fail();\n  return {\n    request_id: requestId, status: body.status, tick_status: data.tick_status,\n    skip_reason: data.skip_reason, local_mutation_state: data.local_mutation_state,\n    synchronization: cloneSummary(data.synchronization), generation: cloneSummary(data.generation),\n    messages_sent: 0, external_mutations: 0,\n  };\n}\nreturn [{json: normalizeReminderTick($input.first().json, $('Preparar tick').first().json.request_id)}];\n"
+      }
+    },
+    {
+      "id": "lembretes-solicitar-disparo",
+      "name": "Solicitar disparo protegido",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1600,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/api/v1/reminders/dispatch",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Request-ID",
+              "value": "={{ $json.request_id }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "{}",
+        "options": {
+          "redirect": {
+            "redirect": {
+              "followRedirects": false
+            }
+          },
+          "timeout": 120000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "credentials": {
+        "httpBearerAuth": {
+          "name": "Genius API - local"
+        }
+      },
+      "retryOnFail": false,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "lembretes-resumo-disparo",
+      "name": "Validar resumo do disparo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1860,
+        0
+      ],
+      "parameters": {
+        "jsCode": "function normalizeReminderDispatch(input, requestId) {\n  const fail = () => { throw new Error('reminder_dispatch_invalid_response'); };\n  const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);\n  const exact = (value, keys) => object(value) && Object.keys(value).length === keys.length &&\n    keys.every(key => Object.hasOwn(value, key));\n  const count = value => Number.isSafeInteger(value) && value >= 0;\n  const counters = ['reminders_considered', 'expired_count', 'cancelled_count', 'blocked_count',\n    'accepted_count', 'uncertain_count', 'failed_count', 'transport_attempts'];\n  if (typeof requestId !== 'string' || !/^reminder-tick-[A-Za-z0-9][A-Za-z0-9._-]*$/.test(requestId) ||\n      requestId.length > 128 || !object(input) || ![200, 503].includes(input.statusCode)) return fail();\n  const body = input.body;\n  if (!exact(body, ['api_version', 'request_id', 'operation_id', 'status', 'action',\n    'mutation_state', 'message', 'data', 'error']) || body.api_version !== '1' ||\n    body.request_id !== requestId || body.operation_id !== null || body.action !== 'reminder_dispatch' ||\n    typeof body.message !== 'string' || body.message.length === 0 || body.message.length > 2000) return fail();\n  const data = body.data;\n  const validError = code => exact(body.error, ['code', 'retryable', 'fields']) &&\n    body.error.code === code && body.error.retryable === false &&\n    Array.isArray(body.error.fields) && body.error.fields.length === 0;\n  // An unexpected boundary failure cannot invent counters for a transport that\n  // may already have started. It still terminates with a fixed, safe error.\n  if (data === null) {\n    if (input.statusCode !== 503 || body.status !== 'failed' ||\n        !['unknown', 'not_applied'].includes(body.mutation_state) ||\n        !validError('reminder_dispatch_failed')) return fail();\n    throw new Error('reminder_dispatch_failed');\n  }\n  if (!exact(data, ['dispatch_status', 'skip_reason', ...counters]) ||\n      !counters.every(key => count(data[key])) ||\n      data.transport_attempts !== data.accepted_count + data.uncertain_count) return fail();\n  const mutationState = data.uncertain_count > 0 || data.transport_attempts > data.accepted_count ? 'unknown' :\n    data.transport_attempts === data.accepted_count && data.accepted_count > 0 ? 'confirmed' : 'not_applied';\n  if (body.mutation_state !== mutationState) return fail();\n  if (input.statusCode === 503) {\n    const partial = data.dispatch_status === 'partial';\n    if (body.status !== 'failed' || !['failed', 'partial'].includes(data.dispatch_status) ||\n        data.skip_reason !== null || data.failed_count + data.uncertain_count === 0 ||\n        !validError(partial ? 'reminder_dispatch_partial' : 'reminder_dispatch_failed')) return fail();\n    throw new Error(partial ? 'reminder_dispatch_partial' : 'reminder_dispatch_failed');\n  }\n  if (body.error !== null) return fail();\n  if (data.dispatch_status === 'completed') {\n    if (body.status !== 'succeeded' || data.skip_reason !== null ||\n        data.failed_count !== 0 || data.uncertain_count !== 0) return fail();\n  } else if (data.dispatch_status === 'skipped') {\n    if (body.status !== 'skipped' || !['not_configured', 'disabled', 'permission_required', 'busy'].includes(data.skip_reason) ||\n        counters.some(key => data[key] !== 0)) return fail();\n  } else return fail();\n  return {request_id: requestId, status: body.status, mutation_state: body.mutation_state,\n    dispatch_status: data.dispatch_status, skip_reason: data.skip_reason,\n    reminders_considered: data.reminders_considered, expired_count: data.expired_count,\n    cancelled_count: data.cancelled_count, blocked_count: data.blocked_count,\n    accepted_count: data.accepted_count, uncertain_count: data.uncertain_count,\n    failed_count: data.failed_count, transport_attempts: data.transport_attempts};\n}\nreturn [{json: normalizeReminderDispatch($input.first().json, $('Preparar tick').first().json.request_id)}];\n"
+      }
+    },
+    {
+      "id": "lembretes-solicitar-recuperacao",
+      "name": "Solicitar recuperacao local",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        520,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/api/v1/reminders/recover",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Request-ID",
+              "value": "={{ $json.request_id }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "{}",
+        "options": {
+          "redirect": {
+            "redirect": {
+              "followRedirects": false
+            }
+          },
+          "timeout": 120000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "credentials": {
+        "httpBearerAuth": {
+          "name": "Genius API - local"
+        }
+      },
+      "retryOnFail": false,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "lembretes-resumo-recuperacao",
+      "name": "Validar resumo da recuperacao",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        0
+      ],
+      "parameters": {
+        "jsCode": "function normalizeReminderRecovery(input, requestId) {\n  const fail = () => { throw new Error('reminder_recovery_invalid_response'); };\n  const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);\n  const exact = (value, keys) => object(value) && Object.keys(value).length === keys.length &&\n    keys.every(key => Object.hasOwn(value, key));\n  const count = value => Number.isSafeInteger(value) && value >= 0;\n  const counters = ['reservations_recovered', 'expired_count', 'uncertain_count', 'protected_count'];\n  if (typeof requestId !== 'string' || !/^reminder-tick-[A-Za-z0-9][A-Za-z0-9._-]*$/.test(requestId) ||\n      requestId.length > 128 || !object(input) || ![200, 503].includes(input.statusCode)) return fail();\n  const body = input.body;\n  if (!exact(body, ['api_version', 'request_id', 'operation_id', 'status', 'action',\n    'mutation_state', 'message', 'data', 'error']) || body.api_version !== '1' ||\n    body.request_id !== requestId || body.operation_id !== null || body.action !== 'reminder_recovery' ||\n    body.mutation_state !== 'not_applicable' || typeof body.message !== 'string' ||\n    body.message.length === 0 || body.message.length > 2000) return fail();\n  const validError = () => exact(body.error, ['code', 'retryable', 'fields']) &&\n    body.error.code === 'reminder_recovery_failed' && body.error.retryable === false &&\n    Array.isArray(body.error.fields) && body.error.fields.length === 0;\n  const data = body.data;\n  // A boundary failure cannot fabricate counters when the commit is unknown.\n  if (data === null) {\n    if (input.statusCode !== 503 || body.status !== 'failed' || !validError()) return fail();\n    throw new Error('reminder_recovery_failed');\n  }\n  if (!exact(data, ['recovery_status', 'skip_reason', ...counters, 'messages_sent', 'external_mutations']) ||\n      !counters.every(key => count(data[key])) || data.messages_sent !== 0 || data.external_mutations !== 0) return fail();\n  if (input.statusCode === 503) {\n    if (body.status !== 'failed' || data.recovery_status !== 'failed' || data.skip_reason !== null ||\n        !validError()) return fail();\n    // Counts already confirmed before a cleanup failure remain observations,\n    // but the next phase must not run on an HTTP failure.\n    throw new Error('reminder_recovery_failed');\n  }\n  if (body.error !== null) return fail();\n  if (data.recovery_status === 'completed') {\n    if (body.status !== 'succeeded' || data.skip_reason !== null) return fail();\n  } else if (data.recovery_status === 'skipped') {\n    if (body.status !== 'skipped' || !['not_configured', 'disabled', 'permission_required', 'busy'].includes(data.skip_reason) ||\n        counters.some(key => data[key] !== 0)) return fail();\n  } else return fail();\n  return {request_id: requestId, status: body.status, recovery_status: data.recovery_status,\n    skip_reason: data.skip_reason, reservations_recovered: data.reservations_recovered,\n    expired_count: data.expired_count, uncertain_count: data.uncertain_count,\n    protected_count: data.protected_count, messages_sent: 0, external_mutations: 0};\n}\nreturn [{json: normalizeReminderRecovery($input.first().json, $('Preparar tick').first().json.request_id)}];\n"
+      }
+    }
+  ],
+  "connections": {
+    "Verificar a cada minuto": {
+      "main": [
+        [
+          {
+            "node": "Preparar tick",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar tick": {
+      "main": [
+        [
+          {
+            "node": "Solicitar recuperacao local",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Solicitar verificacao protegida": {
+      "main": [
+        [
+          {
+            "node": "Validar resumo seguro",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Validar resumo seguro",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar resumo seguro": {
+      "main": [
+        [
+          {
+            "node": "Solicitar disparo protegido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Solicitar disparo protegido": {
+      "main": [
+        [
+          {
+            "node": "Validar resumo do disparo",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Validar resumo do disparo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Solicitar recuperacao local": {
+      "main": [
+        [
+          {
+            "node": "Validar resumo da recuperacao",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Validar resumo da recuperacao",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar resumo da recuperacao": {
+      "main": [
+        [
+          {
+            "node": "Solicitar verificacao protegida",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Fortaleza",
+    "saveDataSuccessExecution": "none",
+    "saveDataErrorExecution": "none",
+    "saveManualExecutions": false,
+    "saveExecutionProgress": false,
+    "executionTimeout": 420,
+    "callerPolicy": "none"
+  },
+  "pinData": {},
+  "tags": []
+}

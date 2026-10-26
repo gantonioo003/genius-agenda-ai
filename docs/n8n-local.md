@@ -1,6 +1,6 @@
 # n8n local
 
-O n8n coordena os fluxos de automação. Nesta etapa ele está preparado para uso local; Google Calendar, WhatsApp e a API Python ainda serão conectados.
+O n8n coordena os fluxos de automação. A instância local já tem um fluxo publicado de consultas por webhook → API Python → Google Calendar. WhatsApp e IA entram nas próximas etapas.
 
 ## Executar
 
@@ -47,8 +47,22 @@ Não apague esse volume e não use `docker compose down -v` para uma parada norm
 
 O Docker precisa estar em execução. Para receber mensagens de serviços externos, ainda será necessário configurar uma URL HTTPS pública de webhook. Essa conexão não faz parte da instalação local inicial.
 
-## Próximo passo
+## Primeiro fluxo publicado
 
-Criar um fluxo simples no n8n e fazê-lo chamar um endpoint de teste da API Python. Credenciais reais devem ser configuradas no gerenciador de credenciais, sem exportá-las para o Git.
+O [guia de consulta por webhook](n8n-primeiro-fluxo.md) reúne o export, a configuração e o comando de teste. O fluxo consulta dia, semana e mês. As chaves ficam no gerenciador privado; `secrets/n8n-local.json` guarda a chave de entrada e os IDs locais, fora do Git.
+
+A API precisa estar ligada em `127.0.0.1:8000`. Nesta instalação, o Docker Desktop alcançou essa porta por `host.docker.internal`, sem ampliar o bind para a rede. Não é necessário importar novamente o fluxo ao reiniciar os serviços.
 
 Referência: <https://docs.n8n.io/hosting/installation/docker/>.
+
+## Respostas ao usuário
+
+O fluxo de consultas inclui `presentation`, com mensagem clara, tipo e próximo passo. Para ver apenas a mensagem, use `scripts/test_n8n.py --date 2026-10-23 --text-only`. A [camada de respostas](n8n-respostas-falhas.md) também foi conferida localmente com dúvidas, conflitos e resultados de escrita fictícios. Ela não executa nem repete operações.
+
+## Teste integrado e disparo agendado
+
+A parte 9 adicionou [um ensaio reproduzível](n8n-testes-integracao.md) com CRUD na API isolada `8001` e um Schedule Trigger que consulta o status da API normal. Os dois fluxos são publicados temporariamente pelo runner, despublicados ao terminar e exportados inativos. O fluxo normal de consultas permanece publicado. O ensaio não configura lembretes nem altera compromissos Google reais.
+
+## Fechamento e exports
+
+A etapa 09 foi [concluída](fechamento-etapa-09.md) com três exports públicos conferidos contra a instância. O [inventário dos fluxos](../n8n/README.md) distingue o fluxo normal das fixtures e aponta os comandos de reprodução. O [manifesto](../n8n/exports-manifest.json) registra seus hashes. Os exports estão inativos, sem credenciais ou dados de execução; na instância, somente a consulta normal permanece publicada.

@@ -27,6 +27,7 @@ class DetailsResult:
     before: EventDetails
     after: EventDetails | None
     requested: dict[str, str]
+    recovered: bool = False
 
 
 class EventDetailsGateway(Protocol):

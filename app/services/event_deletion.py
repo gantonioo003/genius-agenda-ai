@@ -5,10 +5,33 @@ from datetime import date, datetime, timedelta
 from hashlib import sha256
 import json
 import re
+import unicodedata
 from typing import Literal, Protocol
 
 from app.services.agenda import AgendaEvent, load_zone
 from app.services.event_selection import validate_event_id
+from app.services.interviews import CalendarOperationError
+
+
+class DeletionBindingError(CalendarOperationError):
+    """A agenda mudou antes de qualquer tentativa de exclusão."""
+
+
+class DeletionVersionError(CalendarOperationError):
+    """A versão vinculada não corresponde à versão excluída condicionalmente."""
+
+
+def validate_deletion_guards(calendar_id, version):
+    """Validar vínculos internos sem aceitar controles em IDs ou headers."""
+    for value, limit in ((calendar_id, 1024), (version, 2048)):
+        if value is None:
+            continue
+        if (not isinstance(value, str) or not value.strip() or len(value) > limit
+                or any(unicodedata.category(char).startswith('C') for char in value)):
+            raise ValueError('O vínculo da exclusão é inválido.')
+        value.encode('utf-8')
+    if calendar_id is not None and any(char.isspace() for char in calendar_id):
+        raise ValueError('A identidade vinculada da agenda é inválida.')
 
 
 @dataclass(frozen=True)
@@ -18,6 +41,7 @@ class DeletionResult:
     event: AgendaEvent | None
     confirmation_token: str | None = None
     question: str | None = None
+    recovered: bool = False
 
 
 class EventDeletionGateway(Protocol):

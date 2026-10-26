@@ -1,0 +1,195 @@
+{
+  "contract_version": "reminder_channel_v1",
+  "implementation_status": "planned_not_active",
+  "reviewed_on": "2026-10-25",
+  "channel": "360dialog_sandbox",
+  "transport": {
+    "url": "https://waba-sandbox.360dialog.io/v1/messages",
+    "recipient_binding": "exact_private_authorized_phone_binding",
+    "payload_example": {
+      "messaging_product": "whatsapp",
+      "recipient_type": "individual",
+      "to": "<destinatario_autorizado>",
+      "type": "text",
+      "text": {
+        "body": "Lembrete da agenda\nEntrevista técnica\nInício: 01/11/2026 às 18:00 (America/Recife)"
+      }
+    }
+  },
+  "limits": {
+    "sandbox_messaging_requests_total": 200,
+    "rejected_requests_count": true,
+    "remaining_requests": null,
+    "remaining_not_queried": true,
+    "custom_template_creation": false,
+    "media_id_upload_retrieval": false
+  },
+  "templates": {
+    "documented_test_inventory": [
+      "disclaimer",
+      "first_welcome_messsage",
+      "interactive_template_sandbox"
+    ],
+    "implemented_sender": {
+      "name": "disclaimer",
+      "language": "en",
+      "components": []
+    },
+    "contextual_reminder_approved_available": false,
+    "fallback_to_test_template": false
+  },
+  "window": {
+    "duration_seconds": 86400,
+    "local_safety_margin_seconds": 60,
+    "margin_is_product_choice": true,
+    "eligible_local_inbound_type": "text",
+    "require_exact_recipient_binding": true,
+    "require_permission": true,
+    "require_valid_original_unix_seconds": true,
+    "reject_future_timestamp": true,
+    "freeze_first_observation_per_id": true,
+    "backfill_from_technical_timestamps": false,
+    "synthetic_events_open_window": false,
+    "outbound_or_status_events_open_window": false,
+    "callback_provenance": "private_url_capability_and_sender_filter_not_cryptographic_signature",
+    "unknown_or_closed_without_contextual_template": "block_no_transport"
+  },
+  "format": {
+    "generation": "deterministic_from_revalidated_event",
+    "unicode_normalization": "NFC",
+    "whitespace_to_spaces_before_control_removal": true,
+    "strip_unicode_control_format_categories": true,
+    "collapse_whitespace_after_removal": true,
+    "empty_title": "Compromisso",
+    "title_max_codepoints": 160,
+    "title_ellipsis": "…",
+    "body_max_codepoints": 1000,
+    "body_budget_is_product_choice": true,
+    "existing_sender_max_python_len": 4096,
+    "fields": [
+      "title",
+      "local_start_date",
+      "local_start_time",
+      "calendar_IANA_time_zone"
+    ],
+    "include_private_description": false,
+    "include_participants_contacts_ids_links_media": false,
+    "relative_countdown_claims": false
+  },
+  "last_user_message_example": "2030-06-01T12:00:00+00:00",
+  "decision_examples": [
+    {
+      "case": "inside_window",
+      "now": "2030-06-01T12:00:00+00:00",
+      "expected": "text_candidate"
+    },
+    {
+      "case": "before_margin",
+      "now": "2030-06-02T11:58:59+00:00",
+      "expected": "text_candidate"
+    },
+    {
+      "case": "exact_margin",
+      "now": "2030-06-02T11:59:00+00:00",
+      "expected": "channel_window_margin"
+    },
+    {
+      "case": "exact_24h",
+      "now": "2030-06-02T12:00:00+00:00",
+      "expected": "channel_window_closed"
+    },
+    {
+      "case": "after_24h",
+      "now": "2030-06-02T12:00:01+00:00",
+      "expected": "channel_window_closed"
+    },
+    {
+      "case": "unknown",
+      "last_user_message": null,
+      "now": "2030-06-01T12:00:00+00:00",
+      "expected": "channel_window_unknown"
+    },
+    {
+      "case": "future_timestamp",
+      "last_user_message": "2030-06-01T12:01:00+00:00",
+      "now": "2030-06-01T12:00:00+00:00",
+      "expected": "channel_window_unknown"
+    },
+    {
+      "case": "no_permission",
+      "permission": false,
+      "now": "2030-06-01T12:00:00+00:00",
+      "expected": "permission_missing"
+    },
+    {
+      "case": "wrong_recipient",
+      "recipient_matches": false,
+      "now": "2030-06-01T12:00:00+00:00",
+      "expected": "recipient_mismatch"
+    },
+    {
+      "case": "reminder_deadline",
+      "reminder_expired": true,
+      "now": "2030-06-01T12:00:00+00:00",
+      "expected": "reminder_expired"
+    },
+    {
+      "case": "outbound_does_not_refresh",
+      "now": "2030-06-02T12:00:01+00:00",
+      "ignored_outbound_at": "2030-06-02T11:00:00+00:00",
+      "expected": "channel_window_closed"
+    },
+    {
+      "case": "delivery_does_not_refresh",
+      "now": "2030-06-02T12:00:01+00:00",
+      "ignored_delivered_at": "2030-06-02T11:30:00+00:00",
+      "expected": "channel_window_closed"
+    }
+  ],
+  "format_examples": [
+    {
+      "case": "normal",
+      "title": "Entrevista técnica",
+      "expected_title": "Entrevista técnica"
+    },
+    {
+      "case": "empty",
+      "title": " \n\t ",
+      "expected_title": "Compromisso"
+    },
+    {
+      "case": "whitespace",
+      "title": "Entrevista\n  de\tprojeto",
+      "expected_title": "Entrevista de projeto"
+    },
+    {
+      "case": "control_and_bidi",
+      "title": "A‮B\u0000C",
+      "expected_title": "ABC"
+    },
+    {
+      "case": "nfc",
+      "title": "Técnica",
+      "expected_title": "Técnica"
+    },
+    {
+      "case": "truncate",
+      "title": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "expected_title": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA…"
+    }
+  ],
+  "source_urls": [
+    "https://docs.360dialog.com/docs/get-started/sandbox",
+    "https://docs.360dialog.com/docs/messaging/overview",
+    "https://business.whatsapp.com/policy"
+  ],
+  "scope_exclusions": [
+    "no_active_scheduler",
+    "no_active_channel_gate",
+    "no_persistence_migration",
+    "no_private_provider_call",
+    "no_real_message",
+    "no_template_approval",
+    "no_runtime_restart"
+  ]
+}

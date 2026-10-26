@@ -78,7 +78,7 @@ O SQLite já vem com o Python. A API cria `data/agenda.db` automaticamente quand
 
 O comando grava um registro temporário, confirma a transação, fecha a conexão e lê o registro por outra conexão. Ao terminar, remove somente seu próprio registro de teste. O resultado esperado contém `"status": "ok"`.
 
-Nesta fase existe a tabela `app_metadata`, que guarda a versão do esquema e a identificação da agenda escolhida. Não existem tabelas de entrevistas, mensagens ou lembretes. As consultas usam parâmetros e as transações são desfeitas quando ocorre erro.
+O esquema SQLite 2 contém `app_metadata` (versão e identificação da agenda), `creation_requests` e `creation_operations` (identidade persistente das criações). A inicialização migra o esquema 1 em uma transação, preservando os metadados. As consultas usam parâmetros; erros desfazem a transação em andamento. A reserva de criação é confirmada antes de chamar o Google e permanece para recuperar tentativas incertas. Não há cópia local dos textos das entrevistas nem tabelas de mensagens ou lembretes. Consulte [duplicações e cuidados com backup](duplicacoes.md).
 
 O banco fica na pasta `data/`, ignorada pelo Git. Parar a API ou desligar o computador preserva esse arquivo. O banco do n8n fica em outro lugar: o volume Docker.
 
@@ -178,3 +178,8 @@ Não use `docker compose down -v` para encerrar o trabalho: essa opção remove 
 - [Google Calendar: permissões de acesso](https://developers.google.com/workspace/calendar/api/auth)
 - [Google OAuth: expiração de tokens](https://developers.google.com/identity/protocols/oauth2#expiration)
 - [n8n: instalação oficial com Docker](https://docs.n8n.io/hosting/installation/docker/)
+
+
+### Falhas de acesso e operação
+
+O transporte aplica timeout de 20 segundos por tentativa, com TLS verificado e sem redirecionamentos ou reenvios implícitos. Leituras usam até duas retentativas do SDK; escritas são enviadas uma vez e conferidas por ID quando a resposta é incerta. As CLIs apresentam erros seguros de autorização, conexão e banco, sem JSON de sucesso. Consulte [recuperação e comandos de verificação](falhas-recuperacao.md).

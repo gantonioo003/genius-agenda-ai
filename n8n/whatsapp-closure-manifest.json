@@ -1,0 +1,73 @@
+{
+  "schema_version": 1,
+  "verified_at_utc": "2026-10-25T14:28:58.847084+00:00",
+  "n8n_version": "2.44.4",
+  "source": "CLI export:workflow dos quatro fluxos; --published tambem conferido nos dois ativos; sem exportar credenciais.",
+  "public_exports_preserved_byte_for_byte": true,
+  "export_policy": {
+    "active": false,
+    "pinData": {},
+    "staticData": "omitted",
+    "local_ids": "omitted",
+    "secrets": "omitted"
+  },
+  "workflow_count": 4,
+  "published_versions_checked": 2,
+  "workflows": [
+    {
+      "file": "workflows/consulta-eventos.json",
+      "name": "Genius Agenda AI - Consulta de teste",
+      "node_count": 7,
+      "sha256": "219857c4babb36d9c8d0e0b753edf501d708cdf9f661eac0e6491ace1011e38f",
+      "public_export_active": false,
+      "installed_published": true,
+      "installed_export_matches_after_sanitization": true,
+      "published_version_checked_with_cli": true,
+      "credential_references_names_only": [
+        "Genius API - local",
+        "Genius Webhook - teste local"
+      ]
+    },
+    {
+      "file": "workflows/integracao-isolada-teste.json",
+      "name": "[TESTE ISOLADO] Genius Agenda - Operacoes",
+      "node_count": 9,
+      "sha256": "efc168c7418f442b2eefc77f037988664cc5e78adfde02bf37c4cc88e150f3b8",
+      "public_export_active": false,
+      "installed_published": false,
+      "installed_export_matches_after_sanitization": true,
+      "published_version_checked_with_cli": false,
+      "credential_references_names_only": [
+        "Genius Fixture API - isolada",
+        "Genius Fixture Webhook - isolado"
+      ]
+    },
+    {
+      "file": "workflows/disparo-agendado-teste.json",
+      "name": "Genius Agenda AI - Disparo agendado de teste",
+      "node_count": 4,
+      "sha256": "c9d21d55ca20afdc6f11ef36b9b618b1d9564a0b759f2f679e76f17499002d11",
+      "public_export_active": false,
+      "installed_published": false,
+      "installed_export_matches_after_sanitization": true,
+      "published_version_checked_with_cli": false,
+      "credential_references_names_only": [
+        "Genius API - local"
+      ]
+    },
+    {
+      "file": "workflows/whatsapp-sandbox.json",
+      "name": "Genius Agenda AI - WhatsApp com agente",
+      "node_count": 7,
+      "sha256": "a6663e0583c40b205724be208095beceb588f3dc7788a5898e8b8c9548dd91e2",
+      "public_export_active": false,
+      "installed_published": true,
+      "installed_export_matches_after_sanitization": true,
+      "published_version_checked_with_cli": true,
+      "credential_references_names_only": [
+        "Genius API - local",
+        "Genius WhatsApp Sandbox - entrada"
+      ]
+    }
+  ]
+}

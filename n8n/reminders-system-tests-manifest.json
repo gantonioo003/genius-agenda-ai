@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "stage": "12",
+  "part": "9/10",
+  "verified_at_utc": "2026-10-26T06:39:52.769439+00:00",
+  "n8n_version": "2.44.4",
+  "production_code_changed": false,
+  "production_source_files_preserved": 109,
+  "workflow_exports_preserved": 5,
+  "published_versions_checked": 3,
+  "reminder_export_sha256": "7ed85f0130151367ee7423286078f7e18a5599e1494378dba8aea12d7c30bf87",
+  "tests": {
+    "python": 1956,
+    "new_python": 20,
+    "javascript": 981,
+    "new_javascript": 19,
+    "sdk_calendar_scenarios": 14,
+    "tcp_process_scenarios": 6,
+    "graph_scenarios": 19,
+    "skipped": 0
+  },
+  "tcp_graph_bridge": {
+    "cycles": 10,
+    "real_tcp_envelopes": 30,
+    "fixture_processes": 11,
+    "fixture_restarts": 5,
+    "external_attempts": 0,
+    "provider_calls": "fixtures only; no real Google/WhatsApp"
+  },
+  "new_test_sources": {
+    "n8n/tests/lembretes-ciclo-completo.test.cjs": "fffc9ad2be50c4990c2b8f1486bf5074fbe91487892484c51c93b346277b0604",
+    "tests/reminder_http_worker.py": "2483def7d2e668b789d0f05cfcbff4c5176b05b1d0d484a5da3247bee3e03df6",
+    "tests/reminder_system_fixture.py": "8c399382975feba30891642d66f95eeef51cbccface8862b0cdfc7e4d24de770",
+    "tests/test_reminders_system_calendar.py": "e65be023dd0f4c047336f45257d94119165c7a2b1c2c1286a4918b7c8d002ccb",
+    "tests/test_reminders_system_http.py": "72ec383d21c6fc778fac0c09f69f29971f68fbefe00e5c4d117f65ae4fe1c768"
+  },
+  "natural_trigger": {
+    "at": "2026-10-26T03:32:20.806-03:00",
+    "mode": "trigger",
+    "is_manual": false,
+    "success": true,
+    "all_three_http_nodes_and_normalizers_finished": true
+  },
+  "natural_output_values_not_retained": true,
+  "natural_success_scope": "Three valid completed or skipped aggregate DTOs; no transition counts or delivery inferred",
+  "services_restarted": false,
+  "workflows_or_credentials_imported": false,
+  "real_google_event_writes_by_test": 0,
+  "real_whatsapp_sends_by_test": 0,
+  "evidence_records": [
+    136,
+    137
+  ],
+  "guide": "../docs/testes-conjunto-lembretes.md"
+}

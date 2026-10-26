@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "stage": 13,
+  "part": "4/10",
+  "implemented": true,
+  "method": "POST",
+  "endpoint": "/api/v1/agenda/availability",
+  "requires_private_bearer": true,
+  "request_examples": [
+    {
+      "date_from": "2030-06-19",
+      "date_to": "2030-06-19",
+      "window_start": "09:00",
+      "window_end": "12:00",
+      "duration_minutes": 30
+    },
+    {
+      "date_from": "2030-06-19",
+      "date_to": "2030-06-20",
+      "window_start": "09:00",
+      "window_end": "18:00",
+      "duration_minutes": 45,
+      "buffer_minutes": 15
+    }
+  ],
+  "limits": {
+    "inclusive_days": 31,
+    "duration_minutes": [
+      1,
+      1440
+    ],
+    "buffer_minutes": [
+      0,
+      240
+    ],
+    "fixed_step_minutes": 15,
+    "options": 3,
+    "logical_pages": 20,
+    "raw_items": 2000
+  },
+  "llm_calls": false,
+  "calendar_writes": false,
+  "reservation_created": false,
+  "accepts_exclude_event_id": false,
+  "whatsapp_connected": false,
+  "guide": "../../docs/horarios-livres.md",
+  "calls_executed_from_this_example": false
+}

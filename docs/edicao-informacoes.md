@@ -79,3 +79,6 @@ Os casos cobrem as sete combinações possíveis de campos, omissão e limpeza e
 A exclusão com confirmação e a revisão final foram concluídas; a **etapa 07 está encerrada**, conforme o [registro de fechamento](fechamento-etapa-07.md). O transporte HTTP/n8n/WhatsApp e os lembretes seguem pendentes. Descrição e local são lidos nesta operação explícita e ficam no acervo privado; as consultas gerais continuam pedindo apenas seus campos mínimos.
 
 Referências: [edição parcial com events.patch](https://developers.google.com/workspace/calendar/api/v3/reference/events/patch) e [controle de versão com ETag](https://developers.google.com/workspace/calendar/api/guides/version-resources).
+
+
+**Atualização na etapa 08, parte 6:** uma resposta de escrita perdida ou inválida agora é conferida por leitura do mesmo ID. O resultado inclui `recovered: true` quando essa leitura confirma o estado esperado; se a conferência falhar, permanece um erro seguro, sem nova escrita automática. Os registros e limites estão no [guia de falhas e recuperação](falhas-recuperacao.md).

@@ -1,0 +1,271 @@
+{
+  "name": "Genius Agenda AI - WhatsApp com agente",
+  "active": false,
+  "nodes": [
+    {
+      "id": "sandbox-webhook",
+      "name": "Receber metadados",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.2,
+      "position": [
+        0,
+        160
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "genius-agenda/whatsapp-sandbox",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "genius-whatsapp-sandbox-receber-v1",
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "Genius WhatsApp Sandbox - entrada"
+        }
+      }
+    },
+    {
+      "id": "sandbox-validar",
+      "name": "Validar metadados",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        160
+      ],
+      "parameters": {
+        "jsCode": "function validateSandboxMetadata(source) {\n  const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);\n  const body = source?.body;\n  const keys = ['source', 'request_id', 'message_count', 'status_count', 'event_types'];\n  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;\n  const failure = () => ({valid: false, http_status: 422,\n    response: {status: 'invalid_request', api_reachable: false, request_id: null}});\n  if (!object(source) || !object(body) || Object.keys(body).length !== keys.length ||\n      !keys.every(key => Object.hasOwn(body, key)) ||\n      (source.query !== undefined && (!object(source.query) || Object.keys(source.query).length))) return failure();\n  if (body.source !== '360dialog_sandbox' || typeof body.request_id !== 'string' ||\n      !uuid.test(body.request_id)) return failure();\n  if (![body.message_count, body.status_count].every(value =>\n      Number.isInteger(value) && value >= 0 && value <= 100) ||\n      body.message_count + body.status_count === 0) return failure();\n  if (!Array.isArray(body.event_types) || body.event_types.length === 0 || body.event_types.length > 20 ||\n      !body.event_types.every(value => typeof value === 'string' && /^[a-z][a-z0-9_]{0,31}$/.test(value)) ||\n      new Set(body.event_types).size !== body.event_types.length) return failure();\n  const allowed = new Set([\n    'message_text', 'message_image', 'message_audio', 'message_video', 'message_document',\n    'message_sticker', 'message_location', 'message_contacts', 'message_interactive',\n    'message_button', 'message_reaction', 'message_order', 'message_system',\n    'message_unknown', 'message_unsupported',\n    'status_sent', 'status_delivered', 'status_read', 'status_failed', 'status_played',\n  ]);\n  if (!body.event_types.every(value => allowed.has(value)) ||\n      body.event_types.some(value => value.startsWith('message_')) !== (body.message_count > 0) ||\n      body.event_types.some(value => value.startsWith('status_')) !== (body.status_count > 0) ||\n      body.event_types.filter(value => value.startsWith('message_')).length > body.message_count ||\n      body.event_types.filter(value => value.startsWith('status_')).length > body.status_count) return failure();\n  // Dados da origem deixam de circular apos a validacao.\n  return {valid: true, request_id: body.request_id, should_reply: body.message_count > 0};\n}\nreturn [{json: validateSandboxMetadata($input.first().json)}];\n"
+      }
+    },
+    {
+      "id": "sandbox-valido",
+      "name": "Metadados validos?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        480,
+        160
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "metadata-valid",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "sandbox-api-status",
+      "name": "Enfileirar agente",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        720,
+        80
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/api/v1/whatsapp/sandbox/agent",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Request-ID",
+              "value": "={{ $json.request_id }}"
+            }
+          ]
+        },
+        "options": {
+          "redirect": {
+            "redirect": {
+              "followRedirects": false
+            }
+          },
+          "timeout": 15000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { request_id: $json.request_id } }}",
+        "contentType": "json"
+      },
+      "credentials": {
+        "httpBearerAuth": {
+          "name": "Genius API - local"
+        }
+      },
+      "onError": "continueErrorOutput",
+      "retryOnFail": false
+    },
+    {
+      "id": "sandbox-normalizar",
+      "name": "Confirmar fila",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        0
+      ],
+      "parameters": {
+        "jsCode": "function sandboxApiFailure(requestId) {\n  return {http_status: 503,\n    response: {status: 'api_unavailable', api_reachable: false, request_id: requestId}};\n}\nfunction normalizeSandboxAgentStatus(input, requestId, shouldReply) {\n  const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);\n  const body = input?.body;\n  const keys = ['api_version', 'request_id', 'operation_id', 'status', 'action',\n    'mutation_state', 'message', 'data', 'error'];\n  const dataKeys = ['authenticated', 'queue_state', 'reused'];\n  const queueState = shouldReply ? 'queued' : 'skipped';\n  const canonicalId = typeof requestId === 'string' &&\n    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(requestId);\n  if (!canonicalId || typeof shouldReply !== 'boolean' || !object(input) || input.statusCode !== 200 || !object(body) ||\n      Object.keys(body).length !== keys.length || !keys.every(key => Object.hasOwn(body, key)) ||\n      body.api_version !== '1' || body.request_id !== requestId || body.operation_id !== null ||\n      body.status !== 'succeeded' || body.action !== 'whatsapp_agent_turn' || body.mutation_state !== 'not_applicable' ||\n      body.error !== null || typeof body.message !== 'string' || body.message.length > 2000 ||\n      !object(body.data) || Object.keys(body.data).length !== dataKeys.length ||\n      !dataKeys.every(key => Object.hasOwn(body.data, key)) || body.data.authenticated !== true ||\n      body.data.queue_state !== queueState || typeof body.data.reused !== 'boolean') {\n    return sandboxApiFailure(requestId);\n  }\n  return {http_status: 200,\n    response: {status: 'received', api_reachable: true, request_id: requestId, reply_state: queueState}};\n}\nconst metadata = $('Validar metadados').first().json;\nreturn [{json: normalizeSandboxAgentStatus($input.first().json, metadata.request_id, metadata.should_reply)}];\n"
+      }
+    },
+    {
+      "id": "sandbox-falha",
+      "name": "Falha segura",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        240
+      ],
+      "parameters": {
+        "jsCode": "function sandboxApiFailure(requestId) {\n  return {http_status: 503,\n    response: {status: 'api_unavailable', api_reachable: false, request_id: requestId}};\n}\nreturn [{json: sandboxApiFailure($('Validar metadados').first().json.request_id)}];\n"
+      }
+    },
+    {
+      "id": "sandbox-responder",
+      "name": "Responder recebimento",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1220,
+        160
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.response }}",
+        "options": {
+          "responseCode": "={{ $json.http_status }}",
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Cache-Control",
+                "value": "no-store"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Receber metadados": {
+      "main": [
+        [
+          {
+            "node": "Validar metadados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar metadados": {
+      "main": [
+        [
+          {
+            "node": "Metadados validos?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Metadados validos?": {
+      "main": [
+        [
+          {
+            "node": "Enfileirar agente",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder recebimento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enfileirar agente": {
+      "main": [
+        [
+          {
+            "node": "Confirmar fila",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Falha segura",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Confirmar fila": {
+      "main": [
+        [
+          {
+            "node": "Responder recebimento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Falha segura": {
+      "main": [
+        [
+          {
+            "node": "Responder recebimento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "none",
+    "saveDataErrorExecution": "none",
+    "saveManualExecutions": false,
+    "saveExecutionProgress": false,
+    "executionTimeout": 30,
+    "callerPolicy": "none"
+  },
+  "pinData": {},
+  "tags": []
+}

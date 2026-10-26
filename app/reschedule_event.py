@@ -6,10 +6,12 @@ from datetime import datetime
 import json
 import sys
 
-from google.auth.exceptions import TransportError
 from googleapiclient.errors import HttpError
-import httplib2
 
+from app.cli_errors import (
+    AUTH_ERRORS, LOCAL_STORE_ERRORS, NETWORK_ERRORS,
+    authentication_failure, local_store_failure,
+)
 from app.google_calendar import CalendarSetupError, GoogleCalendarGateway, calendar_client
 from app.services.interviews import CalendarOperationError
 from app.services.rescheduling import RescheduleService, ScheduleChange, validate_schedule_change
@@ -50,7 +52,11 @@ def main(argv: list[str] | None = None) -> int:
         print(str(exc), file=sys.stderr)
     except HttpError as exc:
         print(f"Google recusou o reagendamento (HTTP {exc.resp.status}).", file=sys.stderr)
-    except (OSError, httplib2.HttpLib2Error, TransportError):
+    except AUTH_ERRORS:
+        print(authentication_failure(writing=args.execute), file=sys.stderr)
+    except LOCAL_STORE_ERRORS:
+        print(local_store_failure(writing=args.execute), file=sys.stderr)
+    except NETWORK_ERRORS:
         print("Não foi possível concluir a operação. Consulte o evento pelo ID antes de repetir.", file=sys.stderr)
     return 1
 

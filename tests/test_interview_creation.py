@@ -1,11 +1,13 @@
 """Criação de entrevistas com clientes falsos: sem credenciais ou rede."""
 
-from contextlib import redirect_stderr, redirect_stdout
+from contextlib import nullcontext, redirect_stderr, redirect_stdout
 from copy import deepcopy
 from dataclasses import replace
 from datetime import datetime
 import io
 import json
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
@@ -15,6 +17,7 @@ from googleapiclient.errors import HttpError
 
 from app import create_test_interview as command
 from app import google_calendar
+from app.database import Database
 from app.services.interviews import (
     CalendarOperationError,
     CreatedInterview,
@@ -45,9 +48,14 @@ class InterviewCreationTests(unittest.TestCase):
         )
         self.database = Mock(name="database_without_io")
         self.database.get_metadata.return_value = None
+        self.creation_temp = TemporaryDirectory()
+        self.addCleanup(self.creation_temp.cleanup)
+        self.creation_ledger_number = 0
+        self._use_empty_creation_ledger()
         for target, value in (
             ("settings", self.settings),
             ("database", self.database),
+            ("calendar_write_lock", nullcontext),
         ):
             patcher = patch.object(google_calendar, target, value)
             patcher.start()
@@ -65,6 +73,7 @@ class InterviewCreationTests(unittest.TestCase):
             "items": [self.calendar]
         }
         self.events = self.client.events.return_value
+        self.events.list.return_value.execute.return_value = {"items": []}
         self.events.get.return_value.execute.side_effect = google_error(404)
         self.events.insert.return_value.execute.side_effect = self._insert_response
         self.gateway = google_calendar.GoogleCalendarGateway(self.client)
@@ -78,9 +87,21 @@ class InterviewCreationTests(unittest.TestCase):
         self.saved_event = body
         return deepcopy(body)
 
-    def _seed_existing_event(self):
+    def _use_empty_creation_ledger(self):
+        self.creation_ledger_number += 1
+        self.creation_database = Database(
+            Path(self.creation_temp.name) / f"creation-{self.creation_ledger_number}.db"
+        )
+        self.creation_database.initialize()
+        for name in ("reserve_creation", "get_creation", "confirm_creation"):
+            getattr(self.database, name).side_effect = getattr(self.creation_database, name)
+
+    def _seed_existing_event(self, *, confirmed_locally=True):
         self.gateway.create_event(self.draft, operation_id=self.operation_id)
         event = deepcopy(self.saved_event)
+        if not confirmed_locally:
+            # Simula evento legado/corrida externa, sem apagar um registro confirmado.
+            self._use_empty_creation_ledger()
         self.client.reset_mock()
         self.events.get.return_value.execute.side_effect = None
         self.events.get.return_value.execute.return_value = event
@@ -231,7 +252,7 @@ class InterviewCreationTests(unittest.TestCase):
         self.events.insert.assert_not_called()
 
     def test_insert_conflict_reads_and_reuses_the_matching_event(self):
-        event = self._seed_existing_event()
+        event = self._seed_existing_event(confirmed_locally=False)
         self.events.get.return_value.execute.side_effect = [google_error(404), event]
         self.events.insert.return_value.execute.side_effect = google_error(409)
 
@@ -243,7 +264,7 @@ class InterviewCreationTests(unittest.TestCase):
         self.events.insert.return_value.execute.assert_called_once_with(num_retries=0)
 
     def test_insert_conflict_does_not_confirm_unrelated_or_unavailable_event(self):
-        original = self._seed_existing_event()
+        original = self._seed_existing_event(confirmed_locally=False)
         invalid_events = (
             dict(deepcopy(original), summary="Evento alterado"),
             dict(deepcopy(original), extendedProperties={"private": {"geniusRequest": "other"}}),
@@ -263,18 +284,26 @@ class InterviewCreationTests(unittest.TestCase):
             self._insert_response(**kwargs)
             raise TimeoutError("Simulated response lost after provider saved the event")
 
+        def read_provider_state(**_kwargs):
+            event = getattr(self, "saved_event", None)
+            if event is None:
+                raise google_error(404)
+            return deepcopy(event)
+
+        self.events.get.return_value.execute.side_effect = read_provider_state
         self.events.insert.return_value.execute.side_effect = save_then_timeout
-        with self.assertRaisesRegex(CalendarOperationError, "pode ter sido salvo"):
-            self.gateway.create_event(self.draft, operation_id=self.operation_id)
+        first = self.gateway.create_event(self.draft, operation_id=self.operation_id)
+        self.assertTrue(first.recovered)
+        self.assertFalse(first.reused)
 
         self.events.insert.return_value.execute.assert_called_once_with(num_retries=0)
         event = deepcopy(self.saved_event)
-        self.events.get.return_value.execute.side_effect = None
-        self.events.get.return_value.execute.return_value = event
         result = self.gateway.create_event(self.draft, operation_id=self.operation_id)
         self.assertTrue(result.reused)
+        self.assertFalse(result.recovered)
         self.assertEqual(result.event_id, event["id"])
         self.events.insert.assert_called_once()
+        self.assertEqual(self.events.get.return_value.execute.call_count, 3)
 
     def test_access_denied_while_checking_event_never_triggers_insert(self):
         self.events.get.return_value.execute.side_effect = google_error(403)

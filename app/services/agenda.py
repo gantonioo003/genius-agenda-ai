@@ -1,9 +1,11 @@
 """Consultas de agenda independentes de Google, n8n e modelo de IA."""
 
 from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import date, datetime, time, timedelta
 from typing import Protocol
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from zoneinfo import ZoneInfo
+
+from app.services.time_rules import load_zone, validate_interval
 
 
 @dataclass(frozen=True)
@@ -54,22 +56,9 @@ class AgendaGateway(Protocol):
     def list_events(self, period: CalendarPeriod) -> CalendarListing: ...
 
 
-def load_zone(name: str) -> ZoneInfo:
-    try:
-        if not name or name != name.strip():
-            raise ValueError
-        return ZoneInfo(name)
-    except (ValueError, ZoneInfoNotFoundError):
-        raise ValueError("Fuso horário inválido ou indisponível. Confira as dependências.") from None
-
-
 def validate_period(period: CalendarPeriod) -> ZoneInfo:
     zone = load_zone(period.time_zone)
-    if any(not isinstance(value, datetime) or value.utcoffset() is None
-           for value in (period.start, period.end)):
-        raise ValueError("Os limites da consulta devem incluir deslocamento UTC.")
-    if period.end.astimezone(timezone.utc) <= period.start.astimezone(timezone.utc):
-        raise ValueError("O período da consulta precisa ter início anterior ao fim.")
+    validate_interval(period.start, period.end)
     return zone
 
 

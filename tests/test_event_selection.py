@@ -244,7 +244,7 @@ class EventSelectionGoogleTests(unittest.TestCase):
                 self.client.events.assert_not_called()
 
     def test_404_410_and_cancelled_tombstone_are_not_found_without_fallback(self):
-        for response in (google_error(404), google_error(410), {"status": "cancelled"}):
+        for response in (google_error(404), google_error(410), {"id": "TargetID", "status": "cancelled"}):
             with self.subTest(response=response):
                 self.client.reset_mock()
                 self.get_request.execute.side_effect = response if isinstance(response, Exception) else None

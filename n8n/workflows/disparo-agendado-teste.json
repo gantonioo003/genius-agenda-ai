@@ -1,0 +1,153 @@
+{
+  "name": "Genius Agenda AI - Disparo agendado de teste",
+  "active": false,
+  "nodes": [
+    {
+      "id": "disparo-agendado",
+      "name": "Disparo a cada minuto",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "limitar-disparos",
+      "name": "Limitar a duas consultas",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        250,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Limite de teste: no maximo duas consultas, incluindo falhas. Nao e um agendador de lembretes.\nconst state = $getWorkflowStaticData('global');\nconst key = 'schedule_smoke_test_v1';\nconst executionId = typeof $execution.id === 'string' && /^[A-Za-z0-9._-]{1,115}$/.test($execution.id) ? $execution.id : null;\nif (executionId === null) return [];\n// O Code node expoe 'production'/'test'; o modo 'trigger' pertence ao registro de execucao do n8n.\nif ($execution.mode !== 'production') return [];\nconst mode = 'production';\nconst previous = state[key];\nif (previous !== undefined && (previous === null || typeof previous !== 'object' || Array.isArray(previous) ||\n    previous.version !== 1 || !Number.isInteger(previous.attempts) || previous.attempts < 0 || previous.attempts > 2 ||\n    !Number.isInteger(previous.successes) || !Number.isInteger(previous.failures) || previous.successes < 0 || previous.failures < 0 ||\n    previous.successes + previous.failures !== previous.attempts)) return [];\nif (previous !== undefined && previous.attempts >= 2) return [];\nconst now = new Date().toISOString();\nconst firstRun = previous?.first_run_at;\nconst summary = {\n  version: 1, attempts: (previous?.attempts ?? 0) + 1,\n  successes: previous?.successes ?? 0, failures: previous?.failures ?? 0,\n  first_run_at: typeof firstRun === 'string' && /^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$/.test(firstRun) ? firstRun : now,\n  last_run_at: now, last_result: 'pending', last_http_status: null,\n  last_execution_id: executionId, last_mode: mode,\n};\nstate[key] = summary;\nreturn [{json: {request_id: 'n8n-schedule-' + executionId}}];\n"
+      }
+    },
+    {
+      "id": "consultar-status",
+      "name": "Consultar status protegido",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        500,
+        0
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "http://host.docker.internal:8000/api/v1/status",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Request-ID",
+              "value": "={{ $json.request_id }}"
+            }
+          ]
+        },
+        "options": {
+          "redirect": {
+            "redirect": {
+              "followRedirects": false
+            }
+          },
+          "timeout": 15000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "credentials": {
+        "httpBearerAuth": {
+          "name": "Genius API - local"
+        }
+      },
+      "retryOnFail": false,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "registrar-status",
+      "name": "Registrar resumo seguro",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        760,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Guarda somente contadores, horario e estado; nunca corpo, cabecalhos, eventos ou erro bruto.\nconst state = $getWorkflowStaticData('global');\nconst summary = state.schedule_smoke_test_v1;\nif (!summary || summary.last_result !== 'pending' || summary.last_execution_id !== $execution.id) return [];\nconst object = value => value !== null && typeof value === 'object' && !Array.isArray(value);\nconst input = $input.first().json;\nconst status = Number.isInteger(input.statusCode) && input.statusCode >= 100 && input.statusCode <= 599 ? input.statusCode : null;\nconst body = input.body;\nconst keys = ['api_version', 'request_id', 'operation_id', 'status', 'action', 'mutation_state', 'message', 'data', 'error'];\nconst succeeded = status === 200 && object(body) && Object.keys(body).length === keys.length && keys.every(key => Object.hasOwn(body, key)) &&\n  body.api_version === '1' && body.request_id === 'n8n-schedule-' + summary.last_execution_id && body.operation_id === null &&\n  body.status === 'succeeded' && body.action === null && body.mutation_state === 'not_applicable' && body.error === null &&\n  typeof body.message === 'string' && body.message.length > 0 && body.message.length <= 2000 &&\n  object(body.data) && Object.keys(body.data).length === 2 && body.data.authenticated === true && body.data.service === 'Genius Agenda AI';\nsummary.last_http_status = status;\nsummary.last_result = succeeded ? 'succeeded' : status === 200 ? 'invalid_response' : status === null ? 'transport_error' : 'http_error';\nif (succeeded) summary.successes += 1;\nelse summary.failures += 1;\nreturn [{json: {attempts: summary.attempts, successes: summary.successes, failures: summary.failures,\n  last_run_at: summary.last_run_at, last_result: summary.last_result, last_http_status: summary.last_http_status,\n  last_execution_id: summary.last_execution_id, last_mode: summary.last_mode}}];\n"
+      }
+    }
+  ],
+  "connections": {
+    "Disparo a cada minuto": {
+      "main": [
+        [
+          {
+            "node": "Limitar a duas consultas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Limitar a duas consultas": {
+      "main": [
+        [
+          {
+            "node": "Consultar status protegido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar status protegido": {
+      "main": [
+        [
+          {
+            "node": "Registrar resumo seguro",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Registrar resumo seguro",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Fortaleza",
+    "saveDataSuccessExecution": "none",
+    "saveDataErrorExecution": "none",
+    "saveManualExecutions": false,
+    "saveExecutionProgress": false,
+    "executionTimeout": 30,
+    "callerPolicy": "none"
+  },
+  "pinData": {},
+  "tags": []
+}

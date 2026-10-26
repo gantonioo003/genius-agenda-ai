@@ -235,3 +235,9 @@ n8n_data/
 *.sqlite-*
 *.sqlite3
 *.sqlite3-*
+
+# Public n8n libraries (override the generic Python lib/ pattern)
+!n8n/lib/
+n8n/lib/*
+!n8n/lib/*.js
+!n8n/lib/*.cjs

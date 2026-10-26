@@ -1,0 +1,157 @@
+{
+  "schema_version": 1,
+  "stage": 13,
+  "part": "1/10",
+  "status": "definition_only",
+  "implemented": false,
+  "registered_tools": false,
+  "available_http_routes": [],
+  "guide": "../../docs/resumos-preparo.md",
+  "acceptance_cases": "acceptance-cases.json",
+  "capabilities": [
+    {
+      "name": "summarize_agenda",
+      "requires": [
+        "resolved_period",
+        "authorized_calendar",
+        "calendar_time_zone",
+        "complete_snapshot"
+      ],
+      "produces": [
+        "verified_facts",
+        "grounded_summary"
+      ],
+      "may_write_calendar": false
+    },
+    {
+      "name": "find_free_slots",
+      "requires": [
+        "resolved_period",
+        "daily_window",
+        "duration_minutes",
+        "complete_occupancy"
+      ],
+      "produces": [
+        "snapshot_slots"
+      ],
+      "may_write_calendar": false
+    },
+    {
+      "name": "suggest_reschedule",
+      "requires": [
+        "unique_current_event",
+        "resolved_period",
+        "daily_window",
+        "current_duration",
+        "complete_occupancy"
+      ],
+      "produces": [
+        "event_bound_snapshot_slots"
+      ],
+      "may_write_calendar": false
+    },
+    {
+      "name": "prepare_briefing",
+      "requires": [
+        "unique_current_event",
+        "supplied_context_only"
+      ],
+      "produces": [
+        "verified_facts",
+        "supplied_context",
+        "unknowns",
+        "suggested_preparation"
+      ],
+      "may_write_calendar": false
+    },
+    {
+      "name": "build_checklist",
+      "requires": [
+        "unique_current_event"
+      ],
+      "produces": [
+        "suggested_actions"
+      ],
+      "may_write_calendar": false
+    }
+  ],
+  "period_policy": {
+    "summary_periods": [
+      "week",
+      "month"
+    ],
+    "week_starts": "monday",
+    "end_exclusive": true,
+    "current_period_includes_elapsed_events": true,
+    "relative_dates_clock": "server_utc_in_authorized_calendar_zone",
+    "incomplete_read_means_empty": false,
+    "incomplete_read_allows_availability": false,
+    "overlap_based_inclusion": true,
+    "count_once_per_exact_occurrence_id": true,
+    "tentative_labelled_separately": true,
+    "summed_durations_as_occupancy_claim": false
+  },
+  "availability_policy": {
+    "calendar_scope": "authorized_calendar_only",
+    "required_duration": true,
+    "required_daily_window": true,
+    "assumed_working_hours": null,
+    "default_buffer_minutes": 0,
+    "slot_step_minutes": 15,
+    "maximum_options": 3,
+    "past_slots_allowed": false,
+    "exclude_rescheduled_event": "exact_occurrence_id_only",
+    "holds_or_reservations": false,
+    "recheck_before_mutation": true,
+    "reuse_conflict_semantics": true
+  },
+  "preparation_policy": {
+    "external_browsing": false,
+    "unknown_company_details_may_be_invented": false,
+    "maximum_checklist_items": 6,
+    "generic_advice_must_be_labelled": true,
+    "supplied_context_is_external_verification": false
+  },
+  "generation_policy": {
+    "critical_facts_authority": "validated_backend_snapshot",
+    "real_ids_or_etags_or_phone_in_model_projection": false,
+    "raw_event_payload_in_model_projection": false,
+    "automatic_anonymization_claimed": false,
+    "existing_query_already_sends_events_to_llm": false,
+    "fallback_summary": "deterministic_facts_after_successful_calendar_read",
+    "invalid_narrative_reused": false,
+    "fallback_after_calendar_failure": "explicit_unavailability"
+  },
+  "conversation_policy": {
+    "typed_context_required_before_whatsapp_integration": true,
+    "revoke_unconsumed_crud_proposal_on_valid_new_informational_intent": true,
+    "revocation_method": "cas_with_user_notice_and_draft_preserved",
+    "running_or_unknown_ledgers_may_be_cleared": false,
+    "generic_yes_or_ordinal_executes_suggestion": false,
+    "informational_reply_may_ask_generic_approval": false,
+    "selection_is_mutation_authorization": false,
+    "calendar_writes_require_existing_explicit_executor_flow": true,
+    "user_request_and_conversation_ownership_required": true,
+    "consumed_consent_may_be_revoked": false,
+    "existing_sender_queue_blocks_may_be_bypassed": false
+  },
+  "functional_decisions_not_http_statuses": [
+    "ready",
+    "needs_clarification",
+    "unavailable",
+    "invalid_output"
+  ],
+  "new_services_or_prompts_or_runtime_changes_in_part_1": false,
+  "existing_suite_reference": {
+    "python": 1956,
+    "javascript": 981,
+    "rerun_in_part_1": false
+  },
+  "presentation_policy": {
+    "whatsapp_maximum_characters": 3500,
+    "maximum_detailed_events": 10,
+    "limited_display_must_be_disclosed": true,
+    "incomplete_source_accepted": false,
+    "automatic_multiple_reply_messages": false
+  }
+}

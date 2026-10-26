@@ -2,17 +2,19 @@
 
 import argparse
 from contextlib import contextmanager
-from dataclasses import asdict
-from datetime import date, datetime, time, timezone
+from dataclasses import asdict, replace
+from datetime import date, datetime, time, timedelta, timezone
 from hashlib import sha256
 from hmac import compare_digest
 import json
 import logging
 import os
 from pathlib import Path
+import sqlite3
 import sys
 import tempfile
 from typing import Any, Iterator
+import unicodedata
 
 from google.auth.exceptions import RefreshError, TransportError
 from google.auth.transport.requests import Request
@@ -24,7 +26,7 @@ from googleapiclient.errors import HttpError
 import httplib2
 from oauthlib.oauth2 import OAuth2Error
 
-from app.database import database
+from app.database import CreationIdentityError, CreationRecord, database
 from app.settings import PROJECT_ROOT, settings
 from app.services.agenda import (
     AgendaEvent,
@@ -35,6 +37,8 @@ from app.services.agenda import (
 )
 from app.services.interviews import (
     CalendarOperationError,
+    CalendarBindingError,
+    ReconciledCreation,
     CreatedInterview,
     InterviewDraft,
     validate_interview,
@@ -43,8 +47,16 @@ from app.services.event_selection import EventLookup, validate_event_id
 from app.services.rescheduling import RescheduleResult, ScheduleChange, validate_schedule_change
 from app.services.event_details import DetailsChange, DetailsResult, EventDetails, validate_details_change
 from app.services.event_deletion import (
-    DeletionResult, deletion_confirmation, deletion_question, validate_deletion,
+    DeletionResult, DeletionBindingError, DeletionVersionError, deletion_confirmation,
+    deletion_question, validate_deletion, validate_deletion_guards,
 )
+from app.services.conflicts import ConflictReport, build_conflict_report, require_available
+from app.services.creation_identity import creation_content_hash
+from app.services.update_snapshot import (
+    UpdateSnapshot, UpdateBindingError, UpdateVersionError,
+    validate_update_snapshot, validate_update_guards,
+)
+from app.google_transport import SingleAttemptHttp
 
 
 SCOPES = (
@@ -82,7 +94,7 @@ def get_credentials(*, interactive: bool = False) -> Credentials:
     if token_file.exists():
         try:
             credentials = Credentials.from_authorized_user_file(str(token_file))
-        except (ValueError, KeyError):
+        except (ValueError, KeyError, TypeError):
             if not interactive:
                 raise CalendarSetupError(
                     "Token local inválido. Execute novamente com --authorize."
@@ -97,7 +109,11 @@ def get_credentials(*, interactive: bool = False) -> Credentials:
         return credentials
     if credentials and credentials.expired and credentials.refresh_token:
         try:
-            credentials.refresh(Request())
+            request = Request()
+            def bounded_request(*args, **kwargs):
+                kwargs["timeout"] = 20
+                return request(*args, **kwargs)
+            credentials.refresh(bounded_request)
             save_token(credentials, token_file)
             return credentials
         except RefreshError:
@@ -105,6 +121,8 @@ def get_credentials(*, interactive: bool = False) -> Credentials:
                 raise CalendarSetupError(
                     "A autorização expirou ou foi revogada. Execute com --authorize."
                 ) from None
+        except (OSError, httplib2.HttpLib2Error, TransportError):
+            raise CalendarSetupError("Não foi possível renovar a autorização por falha de conexão. Tente consultar novamente.") from None
     if not interactive:
         raise CalendarSetupError("Falta autorizar o Google. Execute com --authorize.")
 
@@ -162,38 +180,92 @@ def choose_calendar(
 
 @contextmanager
 def calendar_client(*, interactive: bool = False) -> Iterator[Any]:
-    credentials = get_credentials(interactive=interactive)
-    http = AuthorizedHttp(credentials, http=httplib2.Http(timeout=20))
-    service = build("calendar", "v3", http=http, cache_discovery=False)
     try:
+        credentials = get_credentials(interactive=interactive)
+    except RefreshError:
+        raise CalendarSetupError("A autorização precisa ser renovada. Execute novamente com --authorize.") from None
+    except (OSError, httplib2.HttpLib2Error, TransportError):
+        raise CalendarSetupError("Não foi possível obter a autorização local. Confira conexão e arquivos de configuração.") from None
+    transport = SingleAttemptHttp(timeout=20)
+    http = None
+    service = None
+    try:
+        http = AuthorizedHttp(credentials, http=transport, max_refresh_attempts=0)
+        service = build("calendar", "v3", http=http, cache_discovery=False)
         yield service
     finally:
-        service.close()
+        try:
+            if service is not None:
+                service.close()
+            elif http is not None:
+                http.close()
+            else:
+                transport.close()
+        except (OSError, httplib2.HttpLib2Error, TransportError):
+            logging.getLogger(__name__).warning("Falha ao fechar o cliente Google; o resultado da operação foi preservado.")
 
 
 def resolve_calendar(service: Any) -> dict[str, Any]:
     """Selecionar e fixar uma agenda própria separada antes de qualquer escrita."""
     items: list[dict[str, Any]] = []
     page_token = None
-    while True:
-        page = service.calendarList().list(
-            maxResults=250,
-            pageToken=page_token,
-            showHidden=True,
-            showDeleted=False,
-            minAccessRole="owner",
-            fields="items(id,summary,timeZone,accessRole,primary,deleted),nextPageToken",
-        ).execute(num_retries=2)
-        items.extend(page.get("items", []))
-        page_token = page.get("nextPageToken")
-        if not page_token:
-            break
-    database.initialize()
-    configured_id = settings.google_calendar_id or database.get_metadata("google_calendar_id") or ""
-    calendar = choose_calendar(items, settings.google_calendar_name, configured_id)
-    database.set_metadata("google_calendar_id", calendar["id"])
-    database.set_metadata("google_calendar_name", calendar["summary"])
+    seen_tokens = {None}
+    try:
+        while True:
+            page = service.calendarList().list(
+                maxResults=250,
+                pageToken=page_token,
+                showHidden=True,
+                showDeleted=False,
+                minAccessRole="owner",
+                fields="items(id,summary,timeZone,accessRole,primary,deleted),nextPageToken",
+            ).execute(num_retries=2)
+            if not isinstance(page, dict) or not isinstance(page.get("items", []), list):
+                raise ValueError
+            for item in page.get("items", []):
+                if not isinstance(item, dict):
+                    raise ValueError
+                validate_event_id(item.get("id"))
+                if not isinstance(item.get("summary"), str):
+                    raise ValueError
+                items.append(item)
+            next_token = page.get("nextPageToken")
+            if next_token is None or next_token == "":
+                break
+            if not isinstance(next_token, str) or not next_token.strip() or next_token in seen_tokens:
+                raise ValueError
+            seen_tokens.add(next_token)
+            page_token = next_token
+    except HttpError as exc:
+        raise CalendarSetupError(f"Google recusou a descoberta da agenda (HTTP {exc.resp.status}). Nenhuma operação foi executada.") from None
+    except (OSError, httplib2.HttpLib2Error, TransportError):
+        raise CalendarSetupError("Falha ao consultar a lista de agendas. Nenhuma operação foi executada.") from None
+    except (KeyError, TypeError, ValueError):
+        raise CalendarSetupError("Resposta ou paginação inválida na lista de agendas. Nenhuma operação foi executada.") from None
+    try:
+        database.initialize()
+        configured_id = settings.google_calendar_id or database.get_metadata("google_calendar_id") or ""
+        calendar = choose_calendar(items, settings.google_calendar_name, configured_id)
+        database.set_metadata("google_calendar_id", calendar["id"])
+        database.set_metadata("google_calendar_name", calendar["summary"])
+    except CalendarSetupError:
+        raise
+    except (sqlite3.Error, RuntimeError):
+        raise CalendarSetupError("O banco local está ocupado ou indisponível. Tente novamente após a operação atual.") from None
     return calendar
+
+
+@contextmanager
+def calendar_write_lock() -> Iterator[sqlite3.Connection]:
+    try:
+        with database.calendar_write_lock() as connection:
+            yield connection
+    except sqlite3.Error:
+        # Pode acontecer na liberação após o Google ter aceitado a escrita.
+        raise CalendarOperationError(
+            "Não foi possível concluir o controle local da operação. "
+            "Consulte o evento pelo ID antes de repetir; uma gravação pode ter sido aplicada."
+        ) from None
 
 
 def check_calendar(*, interactive: bool = False) -> dict[str, str]:
@@ -208,6 +280,22 @@ def check_calendar(*, interactive: bool = False) -> dict[str, str]:
     }
 
 
+def _execute_write(request: Any, *, expected_id: str | None = None) -> tuple[Any, bool]:
+    """Uma tentativa; resposta incerta exige leitura, nunca nova escrita aqui."""
+    try:
+        response = request.execute(num_retries=0)
+    except HttpError as exc:
+        if exc.resp.status in (408, 429) or 500 <= exc.resp.status <= 599:
+            return None, True
+        raise  # 401/403/412 não são convertidos em sucesso por recuperação.
+    except (OSError, httplib2.HttpLib2Error, TransportError, ValueError, TypeError):
+        return None, True
+    malformed = expected_id is not None and (
+        not isinstance(response, dict) or response.get("id") != expected_id
+    )
+    return response, malformed
+
+
 class GoogleCalendarGateway:
     """Adaptador Google usado pelo serviço de entrevistas; não abre login."""
 
@@ -215,6 +303,72 @@ class GoogleCalendarGateway:
 
     def __init__(self, service: Any):
         self.service = service
+
+    def _check_conflicts(
+        self, events: Any, calendar: dict, period: CalendarPeriod, *,
+        exclude_event_id: str | None = None,
+    ) -> ConflictReport:
+        zone = validate_period(period)
+        if exclude_event_id is not None:
+            validate_event_id(exclude_event_id)
+        try:
+            calendar_zone = load_zone(calendar.get("timeZone") or period.time_zone)
+            # A API ignora frações de segundo nos filtros. Ampliar a janela e
+            # filtrar pelos instantes exatos evita perder conflitos no fim.
+            query_start = period.start.astimezone(timezone.utc).replace(microsecond=0)
+            query_end = period.end.astimezone(timezone.utc)
+            if query_end.microsecond:
+                query_end = query_end.replace(microsecond=0) + timedelta(seconds=1)
+            collected = {}
+            page_token, seen_tokens = None, {None}
+            while True:
+                page = events.list(
+                    calendarId=calendar["id"], timeMin=query_start.isoformat(), timeMax=query_end.isoformat(),
+                    timeZone=period.time_zone, singleEvents=True, showDeleted=False, showHiddenInvitations=True,
+                    orderBy="startTime", maxResults=250, pageToken=page_token,
+                    fields="items(id,summary,status,start,end,htmlLink,transparency),nextPageToken",
+                ).execute(num_retries=2)
+                if not isinstance(page, dict) or not isinstance(page.get("items", []), list):
+                    raise ValueError("Página inválida na consulta de conflitos.")
+                for item in page.get("items", []):
+                    if not isinstance(item, dict):
+                        raise ValueError("Evento inválido na consulta de conflitos.")
+                    validate_event_id(item.get("id"))
+                    if item.get("status") == "cancelled":
+                        continue
+                    if item.get("status") not in ("confirmed", "tentative"):
+                        raise ValueError("Estado desconhecido na consulta de conflitos.")
+                    transparency = item.get("transparency", "opaque")
+                    if transparency not in ("opaque", "transparent"):
+                        raise ValueError("Disponibilidade desconhecida na consulta de conflitos.")
+                    if transparency == "transparent":
+                        continue
+                    _, _, event = self._read_event(item, zone, calendar_zone)
+                    previous = collected.get(event.event_id)
+                    if previous is not None and previous != event:
+                        raise ValueError("O evento mudou durante a consulta de conflitos.")
+                    collected[event.event_id] = event
+                next_token = page.get("nextPageToken")
+                if next_token is None or next_token == "":
+                    break
+                if not isinstance(next_token, str) or not next_token.strip() or next_token in seen_tokens:
+                    raise ValueError("Paginação inválida na consulta de conflitos.")
+                seen_tokens.add(next_token)
+                page_token = next_token
+            return build_conflict_report(period, calendar["summary"], collected.values(), exclude_event_id=exclude_event_id)
+        except HttpError as exc:
+            raise CalendarOperationError(f"Não foi possível verificar os conflitos (HTTP {exc.resp.status}). Nenhum horário foi confirmado como livre.") from None
+        except (OSError, httplib2.HttpLib2Error, TransportError):
+            raise CalendarOperationError("Falha ao verificar conflitos. Nenhum horário foi confirmado como livre.") from None
+        except (KeyError, TypeError, ValueError, OverflowError):
+            raise CalendarOperationError("Dados inválidos na consulta de conflitos. Nenhum horário foi confirmado como livre.") from None
+
+    def check_conflicts(self, period: CalendarPeriod, *, exclude_event_id: str | None = None) -> ConflictReport:
+        validate_period(period)
+        if exclude_event_id is not None:
+            validate_event_id(exclude_event_id)
+        calendar = resolve_calendar(self.service)
+        return self._check_conflicts(self.service.events(), calendar, period, exclude_event_id=exclude_event_id)
 
     DELETION_FIELDS = "id,etag,summary,status,start,end,htmlLink,recurrence,recurringEventId,eventType"
 
@@ -246,22 +400,30 @@ class GoogleCalendarGateway:
         zone = load_zone(time_zone)
         calendar_zone = load_zone(calendar.get("timeZone") or time_zone)
         _, _, event = self._read_event(item, zone, calendar_zone)
+        if not event.title.strip():
+            event = replace(event, title="(sem título)")
         return event, etag
 
     def delete_event(
         self, event_id: str, *, time_zone: str = "America/Recife", execute: bool = False,
         confirmation_token: str | None = None,
+        expected_calendar_id: str | None = None, expected_version: str | None = None,
     ) -> DeletionResult:
         validate_deletion(event_id, time_zone=time_zone, execute=execute,
                           confirmation_token=confirmation_token)
+        validate_deletion_guards(expected_calendar_id, expected_version)
         attempted = False
         try:
             calendar = resolve_calendar(self.service)
+            if expected_calendar_id is not None and calendar["id"] != expected_calendar_id:
+                raise DeletionBindingError("A agenda mudou antes da exclusão; nenhuma exclusão foi feita.")
             events = self.service.events()
             snapshot = self._deletion_snapshot(events, calendar, event_id, time_zone)
             if snapshot is None:
                 return DeletionResult("already_absent", calendar["summary"], None)
             event, etag = snapshot
+            if expected_version is not None and etag != expected_version:
+                raise DeletionVersionError("A versão do evento mudou antes da exclusão; nenhuma exclusão foi feita.")
             expected = deletion_confirmation(calendar["id"], event_id, etag)
             if not execute:
                 return DeletionResult("needs_confirmation", calendar["summary"], event,
@@ -274,8 +436,11 @@ class GoogleCalendarGateway:
             request.headers["If-Match"] = etag
             attempted = True
             try:
-                request.execute(num_retries=0)  # DELETE retorna corpo vazio.
+                _, recovered = _execute_write(request)  # DELETE retorna corpo vazio.
             except HttpError as exc:
+                if exc.resp.status == 412 and expected_version is not None:
+                    # Somente o 412 da tentativa DELETE comprova a recusa da escrita.
+                    raise DeletionVersionError("O evento mudou durante a exclusão. Faça uma nova prévia antes de confirmar novamente.") from None
                 if exc.resp.status not in (404, 410):
                     raise
                 if self._deletion_snapshot(events, calendar, event_id, time_zone) is None:
@@ -283,7 +448,9 @@ class GoogleCalendarGateway:
                 raise CalendarOperationError("O evento ainda está ativo; a exclusão não foi confirmada.") from None
             if self._deletion_snapshot(events, calendar, event_id, time_zone) is not None:
                 raise CalendarOperationError("O evento ainda está ativo; a exclusão não foi confirmada.")
-            return DeletionResult("deleted", calendar["summary"], event)
+            return DeletionResult("deleted", calendar["summary"], event, recovered=recovered)
+        except (DeletionBindingError, DeletionVersionError):
+            raise
         except CalendarOperationError as exc:
             if attempted:
                 raise CalendarOperationError(
@@ -292,6 +459,9 @@ class GoogleCalendarGateway:
             raise
         except HttpError as exc:
             if exc.resp.status == 412:
+                if expected_version is not None and not attempted:
+                    raise DeletionVersionError("O evento mudou antes da exclusão. Faça uma nova prévia antes de confirmar novamente.") from None
+                # Um 412 da leitura posterior não prova que o DELETE falhou.
                 raise CalendarOperationError("O evento mudou durante a exclusão. Faça uma nova prévia antes de confirmar novamente.") from None
             if attempted:
                 raise CalendarOperationError(
@@ -318,6 +488,11 @@ class GoogleCalendarGateway:
             calendarId=calendar["id"], eventId=event_id,
             timeZone=time_zone, fields=self.DETAILS_FIELDS,
         ).execute(num_retries=2)
+        return self._parse_details_snapshot(item, calendar, event_id, time_zone)
+
+    def _parse_details_snapshot(
+        self, item: Any, calendar: dict, event_id: str, time_zone: str,
+    ) -> tuple[EventDetails, str]:
         if not isinstance(item, dict) or item.get("id") != event_id:
             raise CalendarOperationError("A leitura não confirmou o ID do evento.")
         if item.get("status") not in ("confirmed", "tentative"):
@@ -341,17 +516,23 @@ class GoogleCalendarGateway:
 
     def update_event_details(
         self, event_id: str, change: DetailsChange, *, time_zone: str = "America/Recife",
-        execute: bool = False,
+        execute: bool = False, expected_calendar_id: str | None = None,
+        expected_version: str | None = None,
     ) -> DetailsResult:
         requested = validate_details_change(event_id, change, time_zone=time_zone)
+        validate_update_guards(expected_calendar_id, expected_version)
         attempted = False
         try:
             calendar = resolve_calendar(self.service)
+            if expected_calendar_id is not None and calendar["id"] != expected_calendar_id:
+                raise UpdateBindingError("A agenda mudou antes da edição; nenhuma edição foi feita.")
             events = self.service.events()
             before, etag = self._details_snapshot(events, calendar, event_id, time_zone)
+            if expected_version is not None and etag != expected_version:
+                raise UpdateVersionError("A versão do evento mudou antes da edição; nenhuma edição foi feita.")
 
-            def result(status: str, after: EventDetails | None) -> DetailsResult:
-                return DetailsResult(status, calendar["summary"], before, after, requested)
+            def result(status: str, after: EventDetails | None, *, recovered: bool = False) -> DetailsResult:
+                return DetailsResult(status, calendar["summary"], before, after, requested, recovered)
 
             if not execute:
                 return result("preview", None)
@@ -366,9 +547,7 @@ class GoogleCalendarGateway:
             )
             request.headers["If-Match"] = etag
             attempted = True
-            response = request.execute(num_retries=0)
-            if not isinstance(response, dict) or response.get("id") != event_id:
-                raise CalendarOperationError("A resposta da gravação não confirmou o ID solicitado.")
+            _, recovered = _execute_write(request, expected_id=event_id)
             after, _ = self._details_snapshot(events, calendar, event_id, time_zone)
             if any(getattr(after, field) != requested.get(field, getattr(before, field))
                    for field in ("title", "description", "location")):
@@ -376,7 +555,7 @@ class GoogleCalendarGateway:
             if any(getattr(after, field) != getattr(before, field)
                    for field in ("start", "end", "all_day", "time_zone")):
                 raise CalendarOperationError("A data ou o horário mudou durante a edição; confira o evento.")
-            return result("updated", after)
+            return result("updated", after, recovered=recovered)
         except CalendarOperationError as exc:
             if attempted:
                 raise CalendarOperationError(
@@ -404,11 +583,11 @@ class GoogleCalendarGateway:
             suffix = "Consulte o ID antes de repetir; a edição pode ter sido aplicada." if attempted else "Nenhuma edição foi feita."
             raise CalendarOperationError(f"Dados inválidos na resposta do Google. {suffix}") from None
 
-    SCHEDULE_FIELDS = "id,etag,summary,status,start,end,htmlLink,recurrence,recurringEventId,eventType"
+    SCHEDULE_FIELDS = "id,etag,summary,status,start,end,htmlLink,recurrence,recurringEventId,eventType,transparency"
 
     def _schedule_snapshot(
         self, events: Any, calendar: dict, event_id: str, time_zone: str,
-    ) -> tuple[AgendaEvent, str]:
+    ) -> tuple[AgendaEvent, str, str]:
         item = events.get(
             calendarId=calendar["id"], eventId=event_id,
             timeZone=time_zone, fields=self.SCHEDULE_FIELDS,
@@ -421,6 +600,9 @@ class GoogleCalendarGateway:
             raise CalendarOperationError("Selecione uma ocorrência específica; esta operação não altera a série inteira.")
         if item.get("eventType", "default") != "default":
             raise CalendarOperationError("Este comando reagenda apenas compromissos comuns.")
+        transparency = item.get("transparency", "opaque")
+        if transparency not in ("opaque", "transparent"):
+            raise CalendarOperationError("Não foi possível confirmar se o evento ocupa o horário.")
         etag = item.get("etag")
         if not isinstance(etag, str) or not etag.strip() or "\r" in etag or "\n" in etag:
             raise CalendarOperationError("Não foi possível confirmar a versão atual do evento.")
@@ -429,7 +611,9 @@ class GoogleCalendarGateway:
         _, _, event = self._read_event(item, zone, calendar_zone)
         if event.all_day:
             raise CalendarOperationError("Eventos de dia inteiro precisam de uma operação própria de reagendamento.")
-        return event, etag
+        if not event.title.strip():
+            event = replace(event, title="(sem título)")
+        return event, etag, transparency
 
     @staticmethod
     def _has_requested_schedule(event: AgendaEvent, change: ScheduleChange) -> bool:
@@ -440,42 +624,52 @@ class GoogleCalendarGateway:
 
     def reschedule_event(
         self, event_id: str, change: ScheduleChange, *, execute: bool = False,
+        expected_calendar_id: str | None = None, expected_version: str | None = None,
     ) -> RescheduleResult:
         validate_schedule_change(event_id, change)
+        validate_update_guards(expected_calendar_id, expected_version)
         attempted = False
         try:
             calendar = resolve_calendar(self.service)
+            if expected_calendar_id is not None and calendar["id"] != expected_calendar_id:
+                raise UpdateBindingError("A agenda mudou antes do reagendamento; nenhuma mudança foi feita.")
             events = self.service.events()
-            before, etag = self._schedule_snapshot(events, calendar, event_id, change.time_zone)
+            with calendar_write_lock():
+                before, etag, transparency = self._schedule_snapshot(events, calendar, event_id, change.time_zone)
+                if expected_version is not None and etag != expected_version:
+                    raise UpdateVersionError("A versão do evento mudou antes do reagendamento; nenhuma mudança foi feita.")
 
-            def result(status: str, after: AgendaEvent | None) -> RescheduleResult:
-                return RescheduleResult(
-                    status, calendar["summary"], before, after,
-                    change.start.isoformat(), change.end.isoformat(), change.time_zone,
+                def result(status: str, after: AgendaEvent | None, *, recovered: bool = False) -> RescheduleResult:
+                    return RescheduleResult(
+                        status, calendar["summary"], before, after,
+                        change.start.isoformat(), change.end.isoformat(), change.time_zone, recovered,
+                    )
+
+                if self._has_requested_schedule(before, change):
+                    return result("unchanged", before) if execute else result("preview", None)
+                if transparency == "opaque":
+                    require_available(self._check_conflicts(
+                        events, calendar, CalendarPeriod(change.start, change.end, change.time_zone),
+                        exclude_event_id=event_id,
+                    ))
+                if not execute:
+                    return result("preview", None)
+
+                request = events.patch(
+                    calendarId=calendar["id"], eventId=event_id,
+                    body={
+                        "start": {"dateTime": change.start.isoformat(), "timeZone": change.time_zone},
+                        "end": {"dateTime": change.end.isoformat(), "timeZone": change.time_zone},
+                    },
+                    sendUpdates="none", fields="id",
                 )
-
-            if not execute:
-                return result("preview", None)
-            if self._has_requested_schedule(before, change):
-                return result("unchanged", before)
-
-            request = events.patch(
-                calendarId=calendar["id"], eventId=event_id,
-                body={
-                    "start": {"dateTime": change.start.isoformat(), "timeZone": change.time_zone},
-                    "end": {"dateTime": change.end.isoformat(), "timeZone": change.time_zone},
-                },
-                sendUpdates="none", fields="id",
-            )
-            request.headers["If-Match"] = etag
-            attempted = True
-            response = request.execute(num_retries=0)
-            if not isinstance(response, dict) or response.get("id") != event_id:
-                raise CalendarOperationError("A resposta da gravação não confirmou o ID solicitado.")
-            after, _ = self._schedule_snapshot(events, calendar, event_id, change.time_zone)
-            if not self._has_requested_schedule(after, change):
-                raise CalendarOperationError("A leitura final não confirmou os novos horários.")
-            return result("rescheduled", after)
+                request.headers["If-Match"] = etag
+                attempted = True
+                _, recovered = _execute_write(request, expected_id=event_id)
+                after, _, after_transparency = self._schedule_snapshot(events, calendar, event_id, change.time_zone)
+                if not self._has_requested_schedule(after, change) or transparency != after_transparency:
+                    raise CalendarOperationError("A leitura final não confirmou os novos horários e a ocupação preservada.")
+                return result("rescheduled", after, recovered=recovered)
         except CalendarOperationError as exc:
             if attempted:
                 raise CalendarOperationError(
@@ -512,10 +706,13 @@ class GoogleCalendarGateway:
         item: dict, zone: Any, calendar_zone: Any,
     ) -> tuple[datetime, datetime, AgendaEvent]:
         """Mesmo formato de evento na listagem e na consulta pelo ID."""
+        if not isinstance(item, dict):
+            raise ValueError("Resposta de evento inválida.")
         event_id = item["id"]
-        if not isinstance(event_id, str) or not event_id:
-            raise ValueError("Evento sem identificador.")
+        validate_event_id(event_id)
         start_data, end_data = item["start"], item["end"]
+        if not isinstance(start_data, dict) or not isinstance(end_data, dict):
+            raise ValueError("Horários inválidos no evento.")
         all_day = "date" in start_data and "date" in end_data
         if all_day:
             start_date = date.fromisoformat(start_data["date"])
@@ -544,6 +741,55 @@ class GoogleCalendarGateway:
         )
         return start_utc, end_utc, entry
 
+    def get_update_snapshot(self, event_id: str, *, time_zone: str = "America/Recife") -> UpdateSnapshot:
+        """Ler uma versão completa para conferir campos solicitados e preservados."""
+        validate_event_id(event_id)
+        load_zone(time_zone)
+        try:
+            calendar = resolve_calendar(self.service)
+            item = self.service.events().get(
+                calendarId=calendar["id"], eventId=event_id, timeZone=time_zone,
+                fields=self.DETAILS_FIELDS + ",transparency",
+            ).execute(num_retries=2)
+            event, version = self._parse_details_snapshot(item, calendar, event_id, time_zone)
+            transparency = item.get("transparency", "opaque")
+            return validate_update_snapshot(UpdateSnapshot(calendar["id"], calendar["summary"],
+                event, version, transparency), event_id, time_zone)
+        except HttpError as exc:
+            raise CalendarOperationError(
+                f"Google recusou a leitura da alteração (HTTP {exc.resp.status})."
+            ) from None
+        except (OSError, httplib2.HttpLib2Error, TransportError):
+            raise CalendarOperationError("Não foi possível conferir o estado da alteração.") from None
+        except (KeyError, TypeError, ValueError):
+            raise CalendarOperationError("A resposta não confirmou um estado válido para alteração.") from None
+
+    def get_confirmation_snapshot(self, event_id: str | None, *, time_zone: str = "America/Recife"):
+        """Ler identidade da agenda e ETag; esta operação nunca altera eventos."""
+        load_zone(time_zone)
+        if event_id is not None:
+            validate_event_id(event_id)
+        from app.services.confirmation_snapshot import (
+            ConfirmationSnapshot, validate_confirmation_snapshot,
+        )
+        try:
+            calendar = resolve_calendar(self.service)
+            if event_id is None:
+                snapshot = ConfirmationSnapshot(calendar["id"], calendar["summary"], None, None)
+            else:
+                current = self._deletion_snapshot(self.service.events(), calendar, event_id, time_zone)
+                event, version = (None, None) if current is None else current
+                snapshot = ConfirmationSnapshot(calendar["id"], calendar["summary"], event, version)
+            return validate_confirmation_snapshot(snapshot, event_id, time_zone)
+        except HttpError as exc:
+            raise CalendarOperationError(
+                f"Google recusou a leitura da confirmação (HTTP {exc.resp.status})."
+            ) from None
+        except (OSError, httplib2.HttpLib2Error, TransportError):
+            raise CalendarOperationError("Não foi possível conferir o estado da confirmação.") from None
+        except (KeyError, TypeError, ValueError):
+            raise CalendarOperationError("A resposta não confirmou um estado válido para aprovação.") from None
+
     def get_event(self, event_id: str, *, time_zone: str = "America/Recife") -> EventLookup:
         validate_event_id(event_id)
         zone = load_zone(time_zone)
@@ -559,7 +805,7 @@ class GoogleCalendarGateway:
                 if exc.resp.status in (404, 410):
                     return EventLookup(calendar["summary"], None)
                 raise
-            if not isinstance(item, dict):
+            if not isinstance(item, dict) or item.get("id") != event_id:
                 raise ValueError("Resposta de evento inválida.")
             if item.get("status") == "cancelled":
                 return EventLookup(calendar["summary"], None)
@@ -571,7 +817,7 @@ class GoogleCalendarGateway:
             raise CalendarOperationError(
                 f"Google recusou a identificação (HTTP {exc.resp.status}). Nenhum evento foi selecionado."
             ) from None
-        except (OSError, httplib2.HttpLib2Error):
+        except (OSError, httplib2.HttpLib2Error, TransportError):
             raise CalendarOperationError(
                 "Não foi possível confirmar o evento. Confira a conexão e tente novamente."
             ) from None
@@ -599,28 +845,39 @@ class GoogleCalendarGateway:
                     maxResults=250, pageToken=page_token,
                     fields="items(id,summary,status,start,end,htmlLink),nextPageToken",
                 ).execute(num_retries=2)
+                if not isinstance(page, dict) or not isinstance(page.get("items", []), list):
+                    raise ValueError("Página inválida na consulta.")
                 for item in page.get("items", []):
+                    if not isinstance(item, dict):
+                        raise ValueError("Evento inválido na consulta.")
+                    validate_event_id(item.get("id"))
                     if item.get("status") == "cancelled":
                         continue
+                    if item.get("status") not in ("confirmed", "tentative"):
+                        raise ValueError("Estado desconhecido na consulta.")
                     start_utc, end_utc, entry = self._read_event(item, zone, calendar_zone)
                     # Sobreposição: inclui madrugada e dias inteiros. O fim é exclusivo.
                     if (start_utc >= period.end.astimezone(timezone.utc)
                             or end_utc <= period.start.astimezone(timezone.utc)):
                         continue
+                    previous = collected.get(entry.event_id)
+                    if previous is not None and previous[1] != entry:
+                        raise ValueError("O evento mudou durante a consulta.")
                     collected[entry.event_id] = (start_utc, entry)
-                page_token = page.get("nextPageToken")
-                if not page_token:
+                next_token = page.get("nextPageToken")
+                if next_token is None or next_token == "":
                     break
-                if page_token in seen_tokens:
+                if not isinstance(next_token, str) or not next_token.strip() or next_token in seen_tokens:
                     raise CalendarOperationError("O Google repetiu uma página; consulta não concluída.")
-                seen_tokens.add(page_token)
+                seen_tokens.add(next_token)
+                page_token = next_token
             ordered = sorted(collected.values(), key=lambda value: (value[0], value[1].event_id))
             return CalendarListing(calendar["summary"], tuple(entry for _, entry in ordered))
         except HttpError as exc:
             raise CalendarOperationError(
                 f"Google recusou a consulta (HTTP {exc.resp.status}). Nenhum resultado foi confirmado."
             ) from None
-        except (OSError, httplib2.HttpLib2Error):
+        except (OSError, httplib2.HttpLib2Error, TransportError):
             raise CalendarOperationError(
                 "Não foi possível concluir a consulta. Confira a conexão e tente novamente."
             ) from None
@@ -629,17 +886,33 @@ class GoogleCalendarGateway:
                 "A resposta do Google contém dados de evento ou fuso inválidos; consulta não concluída."
             ) from None
 
+    @staticmethod
+    def _validate_creation_calendar_id(value: str) -> str:
+        if (not isinstance(value, str) or not value or len(value) > 1024
+                or any(char.isspace() or unicodedata.category(char).startswith("C") for char in value)):
+            raise ValueError("Informe a identidade válida da agenda vinculada.")
+        try:
+            value.encode("utf-8")
+        except UnicodeError:
+            raise ValueError("Informe a identidade válida da agenda vinculada.") from None
+        return value
+
     def create_event(
-        self, draft: InterviewDraft, *, operation_id: str
+        self, draft: InterviewDraft, *, operation_id: str,
+        expected_calendar_id: str | None = None,
     ) -> CreatedInterview:
         validate_interview(draft, operation_id)
+        if expected_calendar_id is not None:
+            self._validate_creation_calendar_id(expected_calendar_id)
         calendar = resolve_calendar(self.service)
+        if expected_calendar_id is not None and calendar["id"] != expected_calendar_id:
+            raise CalendarBindingError("A agenda configurada mudou. Prepare o pedido novamente antes de criar.")
         # Hexadecimal atende ao alfabeto base32hex exigido pelo Google.
         event_id = "genius" + sha256(operation_id.encode("utf-8")).hexdigest()
         body = {
             "id": event_id,
-            "summary": draft.title.strip(),
-            "description": draft.description,
+            "summary": unicodedata.normalize("NFC", draft.title.strip()),
+            "description": unicodedata.normalize("NFC", draft.description),
             "start": {"dateTime": draft.start.isoformat(), "timeZone": draft.time_zone},
             "end": {"dateTime": draft.end.isoformat(), "timeZone": draft.time_zone},
             "visibility": "private",
@@ -648,70 +921,176 @@ class GoogleCalendarGateway:
         fingerprint = sha256(
             json.dumps(body, sort_keys=True, ensure_ascii=True).encode("utf-8")
         ).hexdigest()
-        body["extendedProperties"] = {"private": {"geniusRequest": fingerprint}}
+        request_hash = creation_content_hash(draft.title, draft.description, draft.start, draft.end)
+        # Esta transação curta precisa estar confirmada antes de qualquer POST:
+        # a memória do ID não pode desaparecer em timeout/rollback/crash.
+        try:
+            reservation = database.reserve_creation(
+                calendar["id"], sha256(operation_id.encode("utf-8")).hexdigest(),
+                request_hash, event_id, fingerprint,
+            )
+        except CreationIdentityError as exc:
+            raise CalendarOperationError(str(exc)) from None
+        except sqlite3.Error:
+            raise CalendarOperationError("Não foi possível registrar o pedido localmente; nenhuma criação foi enviada.") from None
+        event_id = reservation.event_id
+        body["id"] = event_id
+        body["extendedProperties"] = {"private": {"geniusRequest": reservation.fingerprint}}
         events = self.service.events()
         try:
             # Na repetição, consultar primeiro: uma tentativa anterior pode ter
             # sido gravada no Google mesmo se a resposta se perdeu na rede.
-            existing = self._find_event(events, calendar["id"], event_id)
-            if existing is not None:
-                return self._result(existing, calendar, body, reused=True)
-            try:
-                event = events.insert(
-                    calendarId=calendar["id"], body=body,
-                    sendUpdates="none", fields=self.EVENT_FIELDS,
-                ).execute(num_retries=0)
-            except HttpError as exc:
-                if exc.resp.status != 409:
-                    raise
-                # Outra execução pode ter criado o mesmo ID entre GET e POST.
-                event = self._find_event(events, calendar["id"], event_id)
-                if event is None:
+            with calendar_write_lock() as connection:
+                current = database.get_creation(calendar["id"], request_hash, connection=connection)
+                if (not isinstance(current, CreationRecord)
+                        or (current.calendar_id, current.request_hash, current.event_id, current.fingerprint)
+                        != (reservation.calendar_id, request_hash, event_id, reservation.fingerprint)
+                        or current.state not in ("pending", "confirmed")):
+                    raise CalendarOperationError("O registro local do pedido não pôde ser confirmado; nenhuma criação foi enviada.")
+                existing = self._find_event(events, calendar["id"], event_id)
+                if existing is not None:
+                    result = self._result(existing, calendar, body, reused=True)
+                    database.confirm_creation(current, connection=connection)
+                    return result
+                if current.state == "confirmed":
                     raise CalendarOperationError(
-                        "O ID já está em uso, mas o evento não pôde ser confirmado."
-                    ) from None
-                return self._result(event, calendar, body, reused=True)
-            return self._result(event, calendar, body, reused=False)
+                        "Este pedido já criou um evento, mas ele não está mais disponível. "
+                        "Confira o ID; repetir o pedido não recria um evento removido."
+                    )
+                require_available(self._check_conflicts(
+                    events, calendar, CalendarPeriod(draft.start, draft.end, draft.time_zone),
+                    exclude_event_id=event_id,
+                ))
+                try:
+                    request = events.insert(
+                        calendarId=calendar["id"], body=body,
+                        sendUpdates="none", fields=self.EVENT_FIELDS,
+                    )
+                    event, recovered = _execute_write(request, expected_id=event_id)
+                except HttpError as exc:
+                    if exc.resp.status != 409:
+                        raise
+                    # Outra execução externa pode ter criado o mesmo ID.
+                    event = self._find_event(events, calendar["id"], event_id)
+                    if event is None:
+                        raise CalendarOperationError(
+                            "O ID já está em uso, mas o evento não pôde ser confirmado."
+                        ) from None
+                    result = self._result(event, calendar, body, reused=True)
+                    database.confirm_creation(current, connection=connection)
+                    return result
+                if not recovered:
+                    try:
+                        result = self._result(event, calendar, body, reused=False)
+                    except CalendarOperationError:
+                        recovered = True
+                if recovered:
+                    event = self._find_event(events, calendar["id"], event_id)
+                    if event is None:
+                        raise CalendarOperationError(
+                            "A criação não foi confirmada na consulta pelo ID. "
+                            "O evento pode ter sido salvo; consulte novamente antes de repetir."
+                        )
+                    result = replace(self._result(event, calendar, body, reused=False), recovered=True)
+                database.confirm_creation(current, connection=connection)
+                return result
+        except CreationIdentityError as exc:
+            raise CalendarOperationError(
+                f"{exc} Consulte o ID antes de repetir; a criação pode ter sido aplicada."
+            ) from None
         except HttpError as exc:
             raise CalendarOperationError(
                 f"Google não confirmou a operação (HTTP {exc.resp.status}). "
                 "Confira o acesso e reutilize o mesmo identificador ao tentar novamente."
             ) from None
-        except (OSError, httplib2.HttpLib2Error):
+        except (OSError, httplib2.HttpLib2Error, TransportError):
             raise CalendarOperationError(
                 "Não foi possível confirmar a criação. O evento pode ter sido salvo; "
                 "tente novamente com o mesmo identificador para consultar o resultado."
             ) from None
 
+    def reconcile_creation(
+        self, draft: InterviewDraft, *, operation_id: str, expected_calendar_id: str,
+    ) -> ReconciledCreation:
+        """Conferir uma identidade persistida sem reservar, inserir ou repetir POST.
+
+        O registro global pode ter sido criado por outra operação de conteúdo
+        idêntico. Seu ID e fingerprint originais são a referência da leitura.
+        Ausência ou falta do registro nunca autorizam outra gravação por aqui.
+        """
+        validate_interview(draft, operation_id)
+        self._validate_creation_calendar_id(expected_calendar_id)
+        calendar = resolve_calendar(self.service)
+        if calendar["id"] != expected_calendar_id:
+            raise CalendarBindingError("A agenda configurada mudou. Confira o pedido antes de continuar.")
+        request_hash = creation_content_hash(draft.title, draft.description, draft.start, draft.end)
+        try:
+            record = database.get_creation(calendar["id"], request_hash)
+            if record is None:
+                return ReconciledCreation("unregistered")
+            if (not isinstance(record, CreationRecord) or record.calendar_id != calendar["id"]
+                    or record.request_hash != request_hash or record.state not in {"pending", "confirmed"}
+                    or not isinstance(record.fingerprint, str) or len(record.fingerprint) != 64
+                    or any(char not in "0123456789abcdef" for char in record.fingerprint)):
+                raise CalendarOperationError("O registro da criação não pôde ser conferido.")
+            validate_event_id(record.event_id)
+            body = {
+                "id": record.event_id,
+                "summary": unicodedata.normalize("NFC", draft.title.strip()),
+                "description": unicodedata.normalize("NFC", draft.description),
+                "start": {"dateTime": draft.start.isoformat(), "timeZone": draft.time_zone},
+                "end": {"dateTime": draft.end.isoformat(), "timeZone": draft.time_zone},
+                "extendedProperties": {"private": {"geniusRequest": record.fingerprint}},
+            }
+            found = self._find_event(self.service.events(), calendar["id"], record.event_id)
+            if found is None:
+                return ReconciledCreation("absent")
+            result = replace(self._result(found, calendar, body, reused=True), recovered=True)
+            return ReconciledCreation("found", result)
+        except CalendarOperationError:
+            raise
+        except (CreationIdentityError, sqlite3.Error, HttpError, OSError,
+                httplib2.HttpLib2Error, TransportError, KeyError, TypeError, ValueError):
+            raise CalendarOperationError("Não foi possível conferir o resultado da criação; nenhuma nova criação foi enviada.") from None
+
     def _find_event(self, events: Any, calendar_id: str, event_id: str) -> dict | None:
         try:
-            return events.get(
+            item = events.get(
                 calendarId=calendar_id, eventId=event_id, fields=self.EVENT_FIELDS
             ).execute(num_retries=2)
+            if not isinstance(item, dict) or item.get("id") != event_id:
+                raise CalendarOperationError("A consulta não confirmou o ID e o estado do evento. Confira o ID antes de repetir.")
+            return item
         except HttpError as exc:
             if exc.resp.status == 404:
                 return None
             raise
+        except (KeyError, TypeError, ValueError):
+            raise CalendarOperationError("Dados inválidos na consulta do evento. Confira o ID antes de repetir.") from None
 
     @staticmethod
     def _result(event: dict, calendar: dict, body: dict, *, reused: bool) -> CreatedInterview:
-        same_request = (
-            event.get("extendedProperties", {}).get("private", {}).get("geniusRequest")
-            == body["extendedProperties"]["private"]["geniusRequest"]
-        )
+        if not isinstance(event, dict):
+            raise CalendarOperationError("A resposta não confirma o evento criado; consulte o ID antes de repetir.")
         try:
-            same_details = all(
-                event.get(field, "") == body[field]
-                for field in ("summary", "description")
-            ) and all(
-                datetime.fromisoformat(event[field]["dateTime"])
-                == datetime.fromisoformat(body[field]["dateTime"])
-                for field in ("start", "end")
+            same_request = (
+                event.get("extendedProperties", {}).get("private", {}).get("geniusRequest")
+                == body["extendedProperties"]["private"]["geniusRequest"]
             )
-        except (KeyError, TypeError, ValueError):
-            same_details = False
+            same_details = creation_content_hash(
+                event["summary"], event.get("description", ""),
+                datetime.fromisoformat(event["start"]["dateTime"]),
+                datetime.fromisoformat(event["end"]["dateTime"]),
+            ) == creation_content_hash(
+                body["summary"], body["description"],
+                datetime.fromisoformat(body["start"]["dateTime"]),
+                datetime.fromisoformat(body["end"]["dateTime"]),
+            )
+        except (AttributeError, KeyError, TypeError, ValueError):
+            same_request = same_details = False
         if (event.get("id") != body["id"] or event.get("status") != "confirmed"
-                or not same_request or not same_details or not event.get("htmlLink")):
+                or not same_request or not same_details
+                or not isinstance(event.get("htmlLink"), str) or not event["htmlLink"].strip()):
             raise CalendarOperationError(
                 "A resposta não confirma os dados solicitados. O ID pode estar em uso "
                 "ou o evento pode ter sido alterado; confira a agenda antes de prosseguir."

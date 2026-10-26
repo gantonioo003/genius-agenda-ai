@@ -1,0 +1,132 @@
+{
+  "schema_version": 1,
+  "id": "interview-card-v1",
+  "status": "visual_ready",
+  "canvas": {
+    "width": 1254,
+    "height": 1254,
+    "format": "PNG",
+    "color_mode": "RGB"
+  },
+  "background": "interview-background-v1.png",
+  "background_source": {
+    "method": "built_in_image_generation",
+    "prompt_file": "interview-background-v1.prompt.txt",
+    "contains_event_data": false
+  },
+  "safe_margin": 100,
+  "text_area": {
+    "x": 100,
+    "y": 580,
+    "width": 1054,
+    "height": 640
+  },
+  "alignment": "center",
+  "font": {
+    "family": "Segoe UI",
+    "fallback": "DejaVu Sans"
+  },
+  "colors": {
+    "primary": "#244C3A",
+    "body": "#29352F",
+    "accent": "#B85B45"
+  },
+  "blocks": [
+    {
+      "key": "brand",
+      "text": "GENIUS AGENDA AI",
+      "x": 100,
+      "y": 590,
+      "width": 1054,
+      "height": 36,
+      "font_size": 26,
+      "font_weight": "semibold",
+      "max_lines": 1
+    },
+    {
+      "key": "headline",
+      "text": "Chegou o seu dia!",
+      "x": 100,
+      "y": 650,
+      "width": 1054,
+      "height": 64,
+      "font_size": 52,
+      "font_weight": "bold",
+      "max_lines": 1
+    },
+    {
+      "key": "event_title",
+      "source": "validated_event.summary",
+      "x": 100,
+      "y": 744,
+      "width": 1054,
+      "height": 116,
+      "font_size": 44,
+      "line_height": 56,
+      "font_weight": "semibold",
+      "max_lines": 2,
+      "max_characters": 80,
+      "overflow": "ellipsis"
+    },
+    {
+      "key": "date",
+      "source": "validated_event.start_in_display_timezone",
+      "display_example": "Terça-feira, 27/10",
+      "x": 100,
+      "y": 905,
+      "width": 1054,
+      "height": 52,
+      "font_size": 38,
+      "max_lines": 1
+    },
+    {
+      "key": "time",
+      "source": "validated_event.start_and_end_in_display_timezone",
+      "display_example": "9h às 9h30",
+      "x": 100,
+      "y": 977,
+      "width": 1054,
+      "height": 66,
+      "font_size": 54,
+      "font_weight": "bold",
+      "max_lines": 1
+    },
+    {
+      "key": "timezone",
+      "source": "friendly_display_timezone",
+      "display_example": "Horário de Recife",
+      "x": 100,
+      "y": 1075,
+      "width": 1054,
+      "height": 42,
+      "font_size": 28,
+      "max_lines": 1
+    },
+    {
+      "key": "footer",
+      "text": "Sua próxima conversa começa bem preparada.",
+      "x": 100,
+      "y": 1181,
+      "width": 1054,
+      "height": 33,
+      "font_size": 23,
+      "max_lines": 1
+    }
+  ],
+  "rendering_rules": {
+    "render_dynamic_text_with_code": true,
+    "do_not_send_event_data_to_image_generator": true,
+    "use_actual_event_timezone": true,
+    "omit_iso_and_utc_in_visible_text": true,
+    "validate_width_before_rendering": true,
+    "unsupported_or_missing_data": "use_text_response",
+    "time_sensitive_headline": "Use 'Chegou o seu dia!' apenas quando a data local da entrevista for hoje; nos demais dias, use 'Sua entrevista está chegando'.",
+    "examples_are_fictional": true
+  },
+  "completion": {
+    "background_generated": true,
+    "layout_defined": true,
+    "dynamic_card_rendered": false,
+    "whatsapp_sent": false
+  }
+}

@@ -280,14 +280,22 @@ class EventDeletionGoogleTests(unittest.TestCase):
     def test_write_timeout_transport_and_server_error_are_uncertain_without_retry(self):
         for failure in (TimeoutError("fake delete timeout"), TransportError("fake transport"),
                         google_error(500), google_error(503)):
-            with self.subTest(failure=type(failure).__name__, text=str(failure)):
-                self.client.reset_mock()
-                self.delete_request.execute.side_effect = failure
-                with self.assertRaisesRegex(CalendarOperationError, "pode ter sido aplicada"):
-                    self.execute()
-                self.events.delete.assert_called_once()
-                self.delete_request.execute.assert_called_once_with(num_retries=0)
-                self.get_request.execute.assert_called_once_with(num_retries=2)
+            for absent in (False, True):
+                with self.subTest(failure=type(failure).__name__, absent=absent):
+                    self.client.reset_mock()
+                    after = google_error(404) if absent else raw_event()
+                    self.get_request.execute.side_effect = [raw_event(), after]
+                    self.delete_request.execute.side_effect = failure
+                    if absent:
+                        result = self.execute()
+                        self.assertTrue(result.recovered)
+                        self.assertEqual(result.status, "deleted")
+                    else:
+                        with self.assertRaisesRegex(CalendarOperationError, "pode ter sido aplicada"):
+                            self.execute()
+                    self.events.delete.assert_called_once()
+                    self.delete_request.execute.assert_called_once_with(num_retries=0)
+                    self.assertEqual(self.get_request.execute.call_count, 2)
 
     def test_active_malformed_or_failed_postread_never_confirms_deleted(self):
         cases = (

@@ -1,11 +1,12 @@
 """Reagendamento independente do modelo de IA e do provedor de calendário."""
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Literal, Protocol
 
-from app.services.agenda import AgendaEvent, load_zone
+from app.services.agenda import AgendaEvent
 from app.services.event_selection import validate_event_id
+from app.services.time_rules import validate_event_interval
 
 
 @dataclass(frozen=True)
@@ -24,6 +25,7 @@ class RescheduleResult:
     requested_start: str
     requested_end: str
     time_zone: str
+    recovered: bool = False
 
 
 class RescheduleGateway(Protocol):
@@ -34,20 +36,9 @@ class RescheduleGateway(Protocol):
 
 def validate_schedule_change(event_id: str, change: ScheduleChange) -> None:
     validate_event_id(event_id)
-    zone = load_zone(change.time_zone)
-    for value in (change.start, change.end):
-        if not isinstance(value, datetime) or value.utcoffset() is None:
-            raise ValueError("Início e fim precisam incluir data, hora e deslocamento UTC.")
-        # Converter pelo UTC detecta horários inexistentes; o offset distingue horas ambíguas.
-        try:
-            local = value.astimezone(timezone.utc).astimezone(zone)
-        except OverflowError:
-            raise ValueError("A data está fora do intervalo de reagendamento suportado.") from None
-        if (local.replace(tzinfo=None) != value.replace(tzinfo=None)
-                or local.utcoffset() != value.utcoffset()):
-            raise ValueError("Data, hora e deslocamento UTC devem corresponder ao fuso informado.")
-    if change.end.astimezone(timezone.utc) <= change.start.astimezone(timezone.utc):
-        raise ValueError("O fim deve ser posterior ao início do compromisso.")
+    if not isinstance(change, ScheduleChange):
+        raise ValueError("Informe os novos horários no formato esperado.")
+    validate_event_interval(change.start, change.end, change.time_zone)
 
 
 class RescheduleService:

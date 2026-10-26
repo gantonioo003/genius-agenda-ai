@@ -1,6 +1,6 @@
 """Reagendamento seguro com clientes falsos, sem credenciais nem rede."""
 
-from contextlib import redirect_stderr, redirect_stdout
+from contextlib import nullcontext, redirect_stderr, redirect_stdout
 from copy import deepcopy
 from dataclasses import replace
 from datetime import datetime
@@ -147,7 +147,11 @@ class RescheduleGoogleTests(unittest.TestCase):
         self.settings = SimpleNamespace(google_calendar_name="Genius Testes", google_calendar_id="")
         self.database = Mock(name="database_without_io")
         self.database.get_metadata.return_value = None
-        for target, value in (("settings", self.settings), ("database", self.database)):
+        for target, value in (
+            ("settings", self.settings),
+            ("database", self.database),
+            ("calendar_write_lock", nullcontext),
+        ):
             patcher = patch.object(google_calendar, target, value)
             patcher.start()
             self.addCleanup(patcher.stop)
@@ -162,6 +166,7 @@ class RescheduleGoogleTests(unittest.TestCase):
             "items": [self.calendar]
         }
         self.events = self.client.events.return_value
+        self.events.list.return_value.execute.return_value = {"items": []}
         for method in ("insert", "update", "delete"):
             getattr(self.events, method).side_effect = AssertionError(
                 "Reagendar não deve chamar outro método de escrita."
@@ -176,8 +181,13 @@ class RescheduleGoogleTests(unittest.TestCase):
         self.addCleanup(self._assert_no_other_mutations_or_title_fallback)
 
     def _assert_no_other_mutations_or_title_fallback(self):
-        for method in ("insert", "update", "delete", "list"):
+        for method in ("insert", "update", "delete"):
             getattr(self.events, method).assert_not_called()
+        for arguments in self.events.list.call_args_list:
+            self.assertEqual(arguments.kwargs["calendarId"], self.calendar["id"])
+            self.assertIn("timeMin", arguments.kwargs)
+            self.assertIn("timeMax", arguments.kwargs)
+            self.assertNotIn("q", arguments.kwargs)
 
     def test_preview_reads_current_event_and_reports_request_without_patch(self):
         result = self.gateway.reschedule_event("TargetID", self.change)
@@ -190,7 +200,7 @@ class RescheduleGoogleTests(unittest.TestCase):
         self.assertEqual(result.requested_end, "2026-10-23T16:30:00-03:00")
         self.events.get.assert_called_once_with(
             calendarId=self.calendar["id"], eventId="TargetID", timeZone="America/Recife",
-            fields="id,etag,summary,status,start,end,htmlLink,recurrence,recurringEventId,eventType",
+            fields="id,etag,summary,status,start,end,htmlLink,recurrence,recurringEventId,eventType,transparency",
         )
         self.get_request.execute.assert_called_once_with(num_retries=2)
         self.events.patch.assert_not_called()
@@ -257,14 +267,21 @@ class RescheduleGoogleTests(unittest.TestCase):
         failures = (TimeoutError("fake timeout"), TransportError("fake transport"),
                     google_error(500), google_error(503))
         for failure in failures:
-            with self.subTest(failure=type(failure).__name__, text=str(failure)):
-                self.client.reset_mock()
-                self.patch_request.execute.side_effect = failure
-                with self.assertRaisesRegex(CalendarOperationError, "pode ter sido aplicada"):
-                    self.gateway.reschedule_event("TargetID", self.change, execute=True)
-                self.events.patch.assert_called_once()
-                self.patch_request.execute.assert_called_once_with(num_retries=0)
-                self.get_request.execute.assert_called_once_with(num_retries=2)
+            for moved in (False, True):
+                with self.subTest(failure=type(failure).__name__, moved=moved):
+                    self.client.reset_mock()
+                    self.get_request.execute.side_effect = [raw_event(), raw_event(moved=moved)]
+                    self.patch_request.execute.side_effect = failure
+                    if moved:
+                        result = self.gateway.reschedule_event("TargetID", self.change, execute=True)
+                        self.assertEqual(result.status, "rescheduled")
+                        self.assertTrue(result.recovered)
+                    else:
+                        with self.assertRaisesRegex(CalendarOperationError, "pode ter sido aplicada"):
+                            self.gateway.reschedule_event("TargetID", self.change, execute=True)
+                    self.events.patch.assert_called_once()
+                    self.patch_request.execute.assert_called_once_with(num_retries=0)
+                    self.assertEqual(self.get_request.execute.call_count, 2)
 
     def test_failed_postwrite_read_never_reports_success_or_repeats_patch(self):
         failures = (google_error(404), google_error(503), TimeoutError("fake postwrite timeout"))
@@ -291,12 +308,17 @@ class RescheduleGoogleTests(unittest.TestCase):
                 self.client.reset_mock()
                 self.get_request.execute.side_effect = [raw_event(), deepcopy(after)]
                 self.patch_request.execute.return_value = patch_response
-                with self.assertRaisesRegex(CalendarOperationError, "pode ter sido aplicada"):
-                    self.gateway.reschedule_event("TargetID", self.change, execute=True)
+                if patch_response != {"id": "TargetID"}:
+                    # O ACK inválido não basta; a leitura exata confirma o estado.
+                    result = self.gateway.reschedule_event("TargetID", self.change, execute=True)
+                    self.assertTrue(result.recovered)
+                    self.assertEqual(result.status, "rescheduled")
+                else:
+                    with self.assertRaisesRegex(CalendarOperationError, "pode ter sido aplicada"):
+                        self.gateway.reschedule_event("TargetID", self.change, execute=True)
                 self.events.patch.assert_called_once()
                 self.patch_request.execute.assert_called_once_with(num_retries=0)
-                self.assertEqual(self.get_request.execute.call_count,
-                                 2 if patch_response == {"id": "TargetID"} else 1)
+                self.assertEqual(self.get_request.execute.call_count, 2)
 
     def test_unavailable_or_unreadable_initial_event_never_starts_patch(self):
         for failure in (google_error(404), google_error(410), google_error(403),

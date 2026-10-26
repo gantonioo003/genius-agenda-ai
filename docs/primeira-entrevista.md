@@ -81,6 +81,9 @@ O identificador da operação de teste é `genius-primeira-entrevista-2026-10-22
 
 O POST de criação não recebe retentativas automáticas. Em caso de timeout, o resultado é tratado como indeterminado: o Google pode ter gravado antes de a resposta se perder. Repita com o mesmo identificador para consultar o resultado; não gere outro ID para a mesma operação. Uma corrida com conflito HTTP 409 também é resolvida por consulta ao ID existente.
 
-Essa proteção é inicial e vale para a mesma operação na agenda selecionada. O controle completo de mensagens, retentativas persistentes e lembretes ainda será construído. Não há detecção de conflitos de horário, validação completa de fusos, participantes ou recorrência nesta etapa. A validação da primeira criação incluiu testes locais, resposta real da API, releitura pelo ID e conferência visual no Google Agenda.
+Essa proteção é inicial e vale para a mesma operação na agenda selecionada. O controle completo de mensagens, retentativas persistentes e lembretes ainda será construído. No marco da etapa 06, ainda não havia detecção de conflitos nem a regra compartilhada de fusos. Na etapa 08, acrescentamos [datas e fusos](datas-fusos.md) e [conflitos antes de criar/reagendar](conflitos.md). Participantes e criação de recorrência continuam fora deste comando. A validação da primeira criação incluiu testes locais, resposta real da API, releitura pelo ID e conferência visual no Google Agenda.
 
 Referências: [criar eventos](https://developers.google.com/workspace/calendar/api/guides/create-events) e [contrato de events.insert](https://developers.google.com/workspace/calendar/api/v3/reference/events/insert).
+
+
+**Atualização na etapa 08, parte 6:** uma resposta de escrita perdida ou inválida agora é conferida por leitura do mesmo ID. O resultado inclui `recovered: true` quando essa leitura confirma o estado esperado; se a conferência falhar, permanece um erro seguro, sem nova escrita automática. Os registros e limites estão no [guia de falhas e recuperação](falhas-recuperacao.md).

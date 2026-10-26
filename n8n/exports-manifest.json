@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "verified_at_utc": "2026-10-23T05:46:29.928520+00:00",
+  "n8n_version": "2.44.4",
+  "source": "export:workflow dos tres fluxos instalados; sem exportacao de credenciais",
+  "public_export_policy": {
+    "active": false,
+    "pinData": {},
+    "staticData": "omitted",
+    "local_workflow_and_credential_ids": "omitted",
+    "secrets": "omitted"
+  },
+  "workflows": [
+    {
+      "file": "workflows/consulta-eventos.json",
+      "name": "Genius Agenda AI - Consulta de teste",
+      "node_count": 7,
+      "sha256": "219857c4babb36d9c8d0e0b753edf501d708cdf9f661eac0e6491ace1011e38f",
+      "active_in_public_export": false,
+      "installed_published": true,
+      "scope": "Consulta normal; GET na API e Google real",
+      "matches_installed_export_after_sanitization": true,
+      "credential_references": [
+        "Genius API - local",
+        "Genius Webhook - teste local"
+      ]
+    },
+    {
+      "file": "workflows/integracao-isolada-teste.json",
+      "name": "[TESTE ISOLADO] Genius Agenda - Operacoes",
+      "node_count": 9,
+      "sha256": "efc168c7418f442b2eefc77f037988664cc5e78adfde02bf37c4cc88e150f3b8",
+      "active_in_public_export": false,
+      "installed_published": false,
+      "scope": "Ensaio CRUD; API8001 e HTTP Google em memoria",
+      "matches_installed_export_after_sanitization": true,
+      "credential_references": [
+        "Genius Fixture API - isolada",
+        "Genius Fixture Webhook - isolado"
+      ]
+    },
+    {
+      "file": "workflows/disparo-agendado-teste.json",
+      "name": "Genius Agenda AI - Disparo agendado de teste",
+      "node_count": 4,
+      "sha256": "c9d21d55ca20afdc6f11ef36b9b618b1d9564a0b759f2f679e76f17499002d11",
+      "active_in_public_export": false,
+      "installed_published": false,
+      "scope": "Ensaio agendado; GET de status na API8000",
+      "matches_installed_export_after_sanitization": true,
+      "credential_references": [
+        "Genius API - local"
+      ]
+    }
+  ]
+}

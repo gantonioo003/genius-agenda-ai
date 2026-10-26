@@ -1,0 +1,202 @@
+{
+  "contract_version": "reminder_rules_v1",
+  "implementation_status": "planned_not_active",
+  "source": {
+    "name": "Desafio_Genius_Agenda_AI_Auto_Genius_BRANDED.docx",
+    "example_offsets_minutes": [
+      1440,
+      60,
+      15
+    ],
+    "intervals_are_configurable": true,
+    "30_5_was_not_required": true
+  },
+  "scope": {
+    "calendar": "explicit_authorized_calendar",
+    "recipient": "exact_private_authorized_binding",
+    "timed_events_only": true,
+    "status": "confirmed",
+    "recurrence": "expanded_occurrences_with_own_id_only",
+    "configuration": "single_explicit_profile_no_event_override"
+  },
+  "default_slots": {
+    "day_before": null,
+    "preparation": 60,
+    "imminent": 15
+  },
+  "configuration_rules": {
+    "unit": "minutes",
+    "integer_only": true,
+    "minimum": 1,
+    "maximum": 10080,
+    "unique_enabled_offsets": true,
+    "descending_slot_order": [
+      "day_before",
+      "preparation",
+      "imminent"
+    ],
+    "all_disabled_allowed": true
+  },
+  "clock": {
+    "comparison_zone": "UTC",
+    "display_zone": "selected_calendar_IANA_zone",
+    "elapsed_minutes": true
+  },
+  "delivery_window": {
+    "grace_seconds": 120,
+    "future_poll_interval_max_seconds": 60,
+    "due_inclusive": true,
+    "deadline_exclusive": true,
+    "deadline": "min(due_utc+grace_seconds,start_utc)",
+    "never_send_after_start": true,
+    "retroactive_catchup": false
+  },
+  "semantic_identity": [
+    "calendar_id",
+    "exact_occurrence_event_id",
+    "start_utc",
+    "stable_slot",
+    "authorized_recipient_binding"
+  ],
+  "not_identity": [
+    "offset_minutes",
+    "due_utc",
+    "title",
+    "etag",
+    "policy_revision",
+    "n8n_execution_id"
+  ],
+  "before_send": "revalidate_exact_event_and_channel",
+  "unknown_send_policy": "retain_identity_block_blind_retry",
+  "examples": [
+    {
+      "name": "Recife padrão",
+      "start": "2026-11-01T18:00:00-03:00",
+      "calendar_time_zone": "America/Recife",
+      "offset_minutes": 60,
+      "expected_due_utc": "2026-11-01T20:00:00+00:00",
+      "expected_due_local": "2026-11-01T17:00:00-03:00"
+    },
+    {
+      "name": "Recife proximidade",
+      "start": "2026-11-01T18:00:00-03:00",
+      "calendar_time_zone": "America/Recife",
+      "offset_minutes": 15,
+      "expected_due_utc": "2026-11-01T20:45:00+00:00",
+      "expected_due_local": "2026-11-01T17:45:00-03:00"
+    },
+    {
+      "name": "Proximidade ajustada para dez",
+      "start": "2026-11-01T18:00:00-03:00",
+      "calendar_time_zone": "America/Recife",
+      "offset_minutes": 10,
+      "expected_due_utc": "2026-11-01T20:50:00+00:00",
+      "expected_due_local": "2026-11-01T17:50:00-03:00"
+    },
+    {
+      "name": "Dia anterior opcional",
+      "start": "2026-11-02T18:00:00-03:00",
+      "calendar_time_zone": "America/Recife",
+      "offset_minutes": 1440,
+      "expected_due_utc": "2026-11-01T21:00:00+00:00",
+      "expected_due_local": "2026-11-01T18:00:00-03:00"
+    },
+    {
+      "name": "Entrada no horário de verão",
+      "start": "2026-03-08T03:30:00-04:00",
+      "calendar_time_zone": "America/New_York",
+      "offset_minutes": 60,
+      "expected_due_utc": "2026-03-08T06:30:00+00:00",
+      "expected_due_local": "2026-03-08T01:30:00-05:00"
+    },
+    {
+      "name": "Fim do horário de verão, segunda ocorrência",
+      "start": "2026-11-01T01:30:00-05:00",
+      "calendar_time_zone": "America/New_York",
+      "offset_minutes": 60,
+      "expected_due_utc": "2026-11-01T05:30:00+00:00",
+      "expected_due_local": "2026-11-01T01:30:00-04:00"
+    }
+  ],
+  "window_examples": [
+    {
+      "now": "2026-11-01T19:59:59+00:00",
+      "expected": "pending"
+    },
+    {
+      "now": "2026-11-01T20:00:00+00:00",
+      "expected": "due"
+    },
+    {
+      "now": "2026-11-01T20:01:59+00:00",
+      "expected": "due"
+    },
+    {
+      "now": "2026-11-01T20:02:00+00:00",
+      "expected": "expired"
+    },
+    {
+      "now": "2026-11-01T21:00:00+00:00",
+      "expected": "expired"
+    }
+  ],
+  "accepted_configuration_examples": [
+    {
+      "day_before": null,
+      "preparation": 60,
+      "imminent": 15
+    },
+    {
+      "day_before": 1440,
+      "preparation": 60,
+      "imminent": 15
+    },
+    {
+      "day_before": null,
+      "preparation": 60,
+      "imminent": 10
+    },
+    {
+      "day_before": null,
+      "preparation": 30,
+      "imminent": 5
+    },
+    {
+      "day_before": null,
+      "preparation": null,
+      "imminent": null
+    }
+  ],
+  "rejected_configuration_examples": [
+    {
+      "day_before": null,
+      "preparation": 15,
+      "imminent": 15
+    },
+    {
+      "day_before": null,
+      "preparation": 5,
+      "imminent": 30
+    },
+    {
+      "day_before": null,
+      "preparation": true,
+      "imminent": 15
+    },
+    {
+      "day_before": null,
+      "preparation": "60",
+      "imminent": 15
+    },
+    {
+      "day_before": null,
+      "preparation": 0,
+      "imminent": 15
+    },
+    {
+      "day_before": null,
+      "preparation": 10081,
+      "imminent": 15
+    }
+  ]
+}

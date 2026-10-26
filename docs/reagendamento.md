@@ -69,6 +69,9 @@ Os casos cobrem validação antes do acesso, fuso/offset e horário de verão, p
 
 ## Continuação
 
-Alteração das demais informações e exclusão com confirmação foram concluídas nas partes 5 e 6. Consulte o [fechamento da etapa 07](fechamento-etapa-07.md) para o estado final e os 139 testes. Detecção de conflitos, lembretes persistentes e atualização desses lembretes após um reagendamento ainda estão pendentes. Não há integração HTTP, n8n ou WhatsApp nesta parte.
+Alteração das demais informações e exclusão com confirmação foram concluídas nas partes 5 e 6. Consulte o [fechamento da etapa 07](fechamento-etapa-07.md) para o estado final e os 139 testes. A [detecção de conflitos](conflitos.md) foi acrescentada na etapa 08, parte 4: um novo horário ocupado impede a prévia e a gravação; o próprio ID é ignorado. Lembretes persistentes e atualização desses lembretes após um reagendamento ainda estão pendentes. Não há integração HTTP, n8n ou WhatsApp nesta parte.
 
 Referências: [semântica de events.patch](https://developers.google.com/workspace/calendar/api/v3/reference/events/patch) e [controle de versão com ETag e If-Match](https://developers.google.com/workspace/calendar/api/guides/version-resources).
+
+
+**Atualização na etapa 08, parte 6:** uma resposta de escrita perdida ou inválida agora é conferida por leitura do mesmo ID. O resultado inclui `recovered: true` quando essa leitura confirma o estado esperado; se a conferência falhar, permanece um erro seguro, sem nova escrita automática. Os registros e limites estão no [guia de falhas e recuperação](falhas-recuperacao.md).

@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "stage": "12",
+  "part": "8/10",
+  "verified_at_utc": "2026-10-26T06:13:22.865866+00:00",
+  "n8n_version": "2.44.4",
+  "workflow": {
+    "file": "workflows/lembretes-periodicos.json",
+    "name": "Genius Agenda AI - Verificação periódica de lembretes",
+    "node_count": 8,
+    "sha256": "7ed85f0130151367ee7423286078f7e18a5599e1494378dba8aea12d7c30bf87",
+    "interval_seconds": 60,
+    "execution_timeout_seconds": 420,
+    "public_export_active": false,
+    "installed_published": true,
+    "workflow_identity_reused": true,
+    "installed_graph_matches_public_export": true,
+    "published_graph_matches_public_export": true,
+    "credential_references_names_only": [
+      "Genius API - local"
+    ]
+  },
+  "previous_installed_workflows_preserved": 4,
+  "previous_published_workflows_preserved": 2,
+  "existing_credential_reused": true,
+  "credentials_exported": false,
+  "export_policy": {
+    "active": false,
+    "pinData": {},
+    "staticData": "omitted",
+    "local_workflow_and_credential_ids": "omitted",
+    "secrets": "omitted"
+  },
+  "natural_trigger": {
+    "at": "2026-10-26T03:13:21.420-03:00",
+    "mode": "trigger",
+    "is_manual": false,
+    "success": true,
+    "recovery_http_and_normalizer_finished": true,
+    "tick_http_and_normalizer_finished": true,
+    "dispatch_http_and_normalizer_finished": true
+  },
+  "execution_payloads_saved": false,
+  "natural_output_values_not_retained": true,
+  "natural_success_scope": "Recovery, tick and dispatch returned valid completed or skipped DTOs; no natural counts, recovered rows or delivery asserted",
+  "manual_preflight": {
+    "recovery": {
+      "recovery_status": "completed",
+      "skip_reason": null,
+      "reservations_recovered": 0,
+      "expired_count": 0,
+      "uncertain_count": 0,
+      "protected_count": 0,
+      "messages_sent": 0,
+      "external_mutations": 0
+    },
+    "tick_status": "completed",
+    "dispatch_status": "completed",
+    "transport_attempts": 0,
+    "human_delivery_confirmation": false
+  },
+  "tests": {
+    "python": 1936,
+    "new_python": 62,
+    "javascript": 962,
+    "new_javascript": 109
+  },
+  "installer_checks": [
+    "role_type_version_url",
+    "exact_connections",
+    "public_code_hashes",
+    "execution_flags"
+  ],
+  "evidence_records": [
+    134,
+    135
+  ],
+  "guide": "../docs/recuperacao-lembretes.md"
+}
