@@ -17,7 +17,7 @@ from app.llm import ModelError, OpenAIResponsesModel
 from app.services.agenda import AgendaEvent
 from app.services.agenda_tools import minimal_event
 from app.services.agent_preview import validate_preview_message
-from app.services.event_selection import validate_event_id
+from app.services.event_selection import normalized_title, validate_event_id
 from app.services.request_preparation import RequestPreparationService
 from app.services.time_rules import load_zone, validate_event_interval
 
@@ -478,6 +478,8 @@ class AgentDialogueService:
         literal = _literal_explicit_mutation(message, memory, self._time_zone, self._clock)
         if literal is not None and literal['action'] == 'reschedule':
             return self._prepare(_last_list_selector(literal, memory), memory)
+        if literal is not None and literal['action'] == 'delete':
+            return self._prepare_literal_delete(literal, memory)
         plan = _validated_plan(self._model.plan_dialogue(instructions=self._instructions(memory), message=message))
         pending = memory.pending_request
         action = pending.fields.get('action') if pending is not None else None
@@ -588,6 +590,28 @@ class AgentDialogueService:
             return validate_dialogue_result(result), replace(memory, pending_request=next_pending)
         validate_pending_request(PendingRequest(fields))
         return self._prepare(fields, memory)
+
+    def _prepare_literal_delete(self, fields, memory):
+        # Um reagendamento pode mover o evento para fora da última consulta.
+        # O ID lembrado orienta somente a data da busca, nunca desempata títulos.
+        fields = dict(fields)
+        if not fields.get('date') and memory.selected_event_id is not None:
+            zone_name = fields.get('time_zone', self._time_zone)
+            try:
+                with self._gateway_factory() as gateway:
+                    lookup = gateway.get_event(memory.selected_event_id, time_zone=zone_name)
+                event = lookup.event
+                if (event is not None and event.event_id == memory.selected_event_id
+                        and event.status in {'confirmed', 'tentative'}
+                        and normalized_title(event.title) == normalized_title(fields['search_title'])):
+                    start = (date.fromisoformat(event.start) if event.all_day else
+                             datetime.fromisoformat(event.start).astimezone(load_zone(zone_name)).date())
+                    fields.update(date=start.isoformat(), period='day')
+            except CalendarSetupError:
+                return DialogueResult('failed', 'delete', 'O acesso à agenda está indisponível.', None, 503, 'calendar_setup_unavailable'), memory
+            except Exception:
+                return DialogueResult('failed', 'delete', 'Não foi possível conferir o compromisso antes da exclusão.', None, 502, 'operation_failed'), memory
+        return self._prepare(_last_list_selector(fields, memory), memory)
 
     def _keep_question(self, memory, result, *, clear_candidates=False):
         pending = memory.pending_request

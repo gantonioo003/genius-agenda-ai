@@ -65,6 +65,53 @@ class LiteralMutationTests(unittest.TestCase):
             self.assertFalse(result.data['execution_allowed'])
             self.assertEqual(self.gateway.writes, 0)
 
+    def moved_memory(self, count=1):
+        from dataclasses import replace
+        memory = self.ready(count)
+        return replace(memory, last_list={'date': '2026-10-27', 'period': 'day', 'time_zone': legacy.ZONE},
+                       selected_event_id='LiteralFake0')
+
+    def test_delete_after_move_uses_current_day_and_still_refetches_unique_match(self):
+        memory = self.moved_memory()
+        self.model.failure = legacy.ModelError('llm_invalid_response')
+        result, _ = self.service.respond('Exclua ' + TITLE + '.', memory)
+        self.assertEqual((result.status, result.action), ('ready', 'delete'))
+        self.assertEqual(result.data['parameters']['event_id'], 'LiteralFake0')
+        self.assertFalse(result.data['execution_allowed'])
+        self.assertEqual([call[0] for call in self.gateway.calls], ['get', 'list', 'get'])
+        self.assertEqual(self.gateway.calls[1][1].start.date().isoformat(), '2026-10-26')
+
+    def test_delete_after_move_does_not_break_same_day_duplicate_tie(self):
+        memory = self.moved_memory(2)
+        result, _ = self.service.respond('Exclua ' + TITLE, memory)
+        self.assertEqual(result.data['reason'], 'event_selection')
+        self.assertEqual(len(result.data['candidates']), 2)
+        self.assertIsNone(result.data['parameters'])
+        self.assertEqual(self.gateway.writes, 0)
+
+    def test_explicit_delete_day_overrides_remembered_moved_event(self):
+        memory = self.moved_memory()
+        result, _ = self.service.respond('Exclua ' + TITLE + ' 27/10/2026.', memory)
+        self.assertEqual(self.gateway.calls[0][0], 'list')
+        self.assertEqual(self.gateway.calls[0][1].start.date().isoformat(), '2026-10-27')
+        self.assertFalse(result.data['execution_allowed'])
+
+    def test_unrelated_selection_never_changes_delete_search_day(self):
+        from dataclasses import replace
+        memory = self.moved_memory()
+        self.gateway.lookups['LiteralFake0'] = replace(self.gateway.lookups['LiteralFake0'], title='Outro compromisso')
+        result, _ = self.service.respond('Exclua ' + TITLE, memory)
+        self.assertEqual(self.gateway.calls[1][1].start.date().isoformat(), '2026-10-27')
+        self.assertNotEqual(result.status, 'ready')
+
+    def test_failed_fresh_lookup_never_prepares_delete(self):
+        memory = self.moved_memory()
+        self.gateway.failure = RuntimeError('temporary failure')
+        result, _ = self.service.respond('Exclua ' + TITLE, memory)
+        self.assertEqual(result.status, 'failed')
+        self.assertIsNone(result.data)
+        self.assertEqual(self.gateway.writes, 0)
+
     def test_two_candidates_never_select_first_for_reschedule_or_delete(self):
         for message in [MESSAGE, 'Exclua ' + TITLE]:
             result, _ = self.service.respond(message, self.ready(2))
