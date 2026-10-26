@@ -33,6 +33,20 @@ class LiteralMutationTests(unittest.TestCase):
         self.assertFalse(result.data['execution_allowed'])
         self.assertEqual([call[0] for call in self.gateway.calls], ['list', 'get'])
 
+    def test_complete_reschedule_without_zone_survives_unavailable_model(self):
+        from unittest.mock import patch
+        from app.llm import ModelError
+        memory = self.ready()
+        message = MESSAGE.replace(', no horário de Recife', '')
+        with patch.object(self.model, 'plan_dialogue', side_effect=ModelError('llm_unavailable')) as model:
+            result, _ = self.service.respond(message, memory)
+        model.assert_not_called()
+        self.assertEqual((result.status, result.action), ('ready', 'reschedule'))
+        self.assertEqual(result.data['parameters']['event_id'], 'LiteralFake0')
+        self.assertEqual(result.data['parameters']['time_zone'], legacy.ZONE)
+        self.assertFalse(result.data['execution_allowed'])
+        self.assertEqual(self.gateway.writes, 0)
+
     def test_reschedule_full_fields_override_stale_selected_hint_and_model_time(self):
         memory = self.ready()
         self.model.plan = legacy.plan(action='reschedule', use_selected_event=True,

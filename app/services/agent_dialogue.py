@@ -200,13 +200,14 @@ def _literal_explicit_mutation(message, memory, default_zone, clock):
     hour = r'([0-9]{1,2}h(?:[0-9]{2})?|[0-9]{2}:[0-9]{2})'
     schedule = re.fullmatch(r'\s*(?:reagende|remarque|mova)\s+(.+?)\s+para\s+'
         r'(?:(hoje|amanhã|amanha),?\s*)?' + day_pattern + r',?\s+das\s+' + hour
-        + r'\s+(?:às|as|a)\s+' + hour + r',?\s+(?:no\s+horário\s+de|no\s+horario\s+de|fuso)\s+'
-        r'(Recife|Fortaleza|UTC|[A-Za-z_+-]+(?:/[A-Za-z0-9_+-]+)+)[.!]?\s*', message, re.IGNORECASE)
+        + r'\s+(?:às|as|a)\s+' + hour + r'(?:,?\s+(?:no\s+horário\s+de|no\s+horario\s+de|fuso)\s+'
+        r'(Recife|Fortaleza|UTC|[A-Za-z_+-]+(?:/[A-Za-z0-9_+-]+)+))?[.!]?\s*', message, re.IGNORECASE)
     deletion = re.fullmatch(r'\s*(?:exclua|apague|remova)\s+(.+?)'
         r'(?:\s+(?:(hoje|amanhã|amanha),?\s*)?' + day_pattern + r')?[.!]?\s*', message, re.IGNORECASE)
     try:
         if schedule is not None:
             title, relative, day_text, start_text, end_text, name = schedule.groups()
+            name = name or default_zone
             zone_name = {'recife': 'America/Recife', 'fortaleza': 'America/Fortaleza', 'utc': 'UTC'}.get(name.casefold(), name)
         elif deletion is not None:
             title, relative, day_text = deletion.groups()
@@ -472,6 +473,11 @@ class AgentDialogueService:
     def _respond(self, message, memory):
         message = validate_preview_message(message, max_input_chars=self._max_input_chars)
         memory = validate_memory(memory)
+        # Pedidos completos de reagendamento usam os dados literais; a seleção
+        # fresca, as validações e a confirmação continuam no preparador comum.
+        literal = _literal_explicit_mutation(message, memory, self._time_zone, self._clock)
+        if literal is not None and literal['action'] == 'reschedule':
+            return self._prepare(_last_list_selector(literal, memory), memory)
         plan = _validated_plan(self._model.plan_dialogue(instructions=self._instructions(memory), message=message))
         pending = memory.pending_request
         action = pending.fields.get('action') if pending is not None else None
