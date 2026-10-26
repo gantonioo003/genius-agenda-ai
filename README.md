@@ -14,21 +14,7 @@ Assistente pelo WhatsApp para organizar entrevistas no Google Calendar, com cont
 
 ## Arquitetura
 
-```mermaid
-flowchart LR
-  W[WhatsApp] --> D[360dialog Sandbox]
-  D --> R[Entrada HTTPS: remetente e deduplicação]
-  R --> N[n8n: webhook autenticado]
-  N --> A[API Python e worker]
-  A <--> L[Gemini: interpretação]
-  A <--> G[Google Calendar]
-  A <--> S[SQLite: contexto e estados]
-  T[n8n: verificação a cada minuto] --> A
-  A --> P[Pillow: dados sobre fundo de IA]
-  P --> H[PNG HTTPS com expiração]
-  H --> D
-  A --> D
-```
+![Arquitetura do Genius Agenda AI](docs/assets/arquitetura.png)
 
 Python/FastAPI, SQLite, Google Calendar API, Gemini API, n8n em Docker e sandbox 360dialog. A interpretação do modelo não substitui validação, confirmação ou execução local. [Arquitetura e estados](docs/arquitetura.md).
 
