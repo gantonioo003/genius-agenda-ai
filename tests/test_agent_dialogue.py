@@ -13,7 +13,7 @@ from app.google_calendar import CalendarSetupError
 from app.llm import ModelError
 from app.services.agenda import AgendaEvent, CalendarListing
 from app.services.agent_dialogue import AgentDialogueService, DialogueResult, validate_dialogue_result
-from app.services.event_selection import EventLookup
+from app.services.event_selection import EventLookup, normalized_title
 
 
 ZONE = 'America/Recife'
@@ -66,6 +66,14 @@ class Gateway:
         if self.failure is not None:
             raise self.failure
         return CalendarListing('Calendário fictício', self.events)
+
+    def search_events_by_title(self, title, *, time_zone):
+        self.calls.append(('search', title, time_zone))
+        if self.failure is not None:
+            raise self.failure
+        needle = normalized_title(title)
+        return CalendarListing('Calendário fictício', tuple(
+            item for item in self.events if needle in normalized_title(item.title)))
 
     def get_event(self, identifier, *, time_zone):
         self.calls.append(('get', identifier, time_zone))
@@ -127,7 +135,7 @@ class AgentDialogueTests(unittest.TestCase):
     def pending_candidates(self, count=2, **overrides):
         self.gateway.events = tuple(event(f'CandidateID{index}') for index in range(count))
         self.gateway.lookups = {item.event_id: item for item in self.gateway.events}
-        return self.turn('Alterar as entrevistas de hoje.', action='edit', search_title='Entrevista',
+        return self.turn('Alterar as entrevistas de 17/06/2030.', action='edit', search_title='Entrevista',
             date='2030-06-17', location=PRIVATE_LOCATION, **overrides)
 
     def test_create_resumes_only_missing_fields_across_three_turns(self):
@@ -174,7 +182,7 @@ class AgentDialogueTests(unittest.TestCase):
     def test_reschedule_date_remains_a_selector_and_is_not_removed_as_anchor(self):
         self.gateway.events = (event('RescheduleID'),)
         self.gateway.lookups['RescheduleID'] = self.gateway.events[0]
-        result, final = self.turn('Reagendar a entrevista do dia 17.', action='reschedule',
+        result, final = self.turn('Reagendar a entrevista de 17/06/2030.', action='reschedule',
             search_title='Entrevista', date='2030-06-17', start=START, end=END)
         self.assertEqual(result.status, 'ready')
         self.assertEqual(result.data['parameters']['event_id'], 'RescheduleID')
@@ -431,7 +439,10 @@ class AgentDialogueTests(unittest.TestCase):
         )
         for changes in variants:
             with self.subTest(changes=changes):
-                result, updated = self.turn('Uma informação mudou.', previous, mode='continue', **changes)
+                message = ('Procure na semana de 17/06/2030.' if changes.get('period') == 'week'
+                           else 'Procure em 18/06/2030.' if changes.get('date') == '2030-06-18'
+                           else 'Uma informação mudou.')
+                result, updated = self.turn(message, previous, mode='continue', **changes)
                 self.assertEqual(result.status, 'needs_clarification')
                 self.assertEqual(updated.pending_request.candidates, ())
         for field in ('event', 'date', 'period', 'time_zone', 'action'):

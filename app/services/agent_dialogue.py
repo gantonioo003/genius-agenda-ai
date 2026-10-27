@@ -45,7 +45,7 @@ _QUESTIONS = {
     'time_zone': 'Qual fuso horário devo usar? Informe uma cidade ou um fuso IANA.',
     'date': 'Qual é a data de referência para esse pedido?',
     'period': 'Você quer consultar um dia, uma semana ou um mês?',
-    'event': 'Qual compromisso deseja usar? Informe o título e a data, ou o identificador completo.',
+    'event': 'Qual é o nome do compromisso que deseja usar?',
     'changes': 'O que deseja alterar: título, descrição ou local?',
     'request': 'Pode esclarecer um único pedido com os dados necessários?',
 }
@@ -76,7 +76,17 @@ do evento atual, complete somente o seletor e conserve start/end já conhecidos.
 Só altere o destino se a mensagem pedir explicitamente outro horário ou corrigir
 o início/término. Nunca converta os horários do evento identificado em novo destino;
 delete usa apenas seletor. Para seleção, use event_id literal da mensagem atual OU
-search_title e date/period. Não misture essas formas. Para 'esse evento' sem ID,
+search_title com o nome informado. O nome sozinho basta: não peça a data nem o
+horário ORIGINAL para editar, reagendar ou excluir. date/period são filtros
+opcionais, usados apenas se o usuário os informou para identificar o evento.
+Não copie a data da última consulta nem a data do DESTINO para esses filtros.
+O servidor pesquisa todos os eventos e pergunta qual usar se houver mais de um.
+No reagendamento, peça somente o novo início/término que ainda estiverem ausentes;
+na edição, peça os campos a alterar. Entenda flexões, sinônimos e pedidos informais:
+apagar/exclusão/desmarcar/cancelar, mudar/editar/atualizar, remarcar/reagendar/trocar
+horário, criar/marcar/colocar e consultar/ver/listar. Resolva o sentido pelo pedido,
+sem limitar a pessoa a palavras de comando. Perguntas e negações não autorizam ações.
+Não misture as formas de seleção. Para 'esse evento' sem ID,
 use use_selected_event somente se o resumo indicar uma seleção de leitura disponível.
 Não invente IDs; o servidor resolve a seleção. Se houver candidatos, select_candidate
 exige escolha explícita pela posição apresentada, como '2' ou 'a segunda'. Nunca
@@ -111,6 +121,9 @@ class _ValidationGateway:
         raise _SelectionRequired()
 
     def get_event(self, *_args, **_kwargs):
+        raise _SelectionRequired()
+
+    def search_events_by_title(self, *_args, **_kwargs):
         raise _SelectionRequired()
 
 
@@ -185,17 +198,6 @@ def _literal_edit_patch(message):
     return {'action': 'edit', 'search_title': title.strip(), field: value.strip()}
 
 
-def _last_list_selector(fields, memory):
-    """O período da consulta orienta uma nova busca, nunca fornece um ID."""
-    if (fields.get('action') in {'edit', 'reschedule', 'delete'} and fields.get('search_title')
-            and not fields.get('event_id') and not fields.get('date') and memory.last_list is not None):
-        fields['date'] = memory.last_list['date']
-        fields.setdefault('period', memory.last_list['period'])
-        fields.setdefault('time_zone', memory.last_list['time_zone'])
-    return fields
-
-
-
 def _awaiting_reschedule_event(pending):
     return (pending is not None and pending.fields.get('action') == 'reschedule'
             and bool(pending.awaiting) and set(pending.awaiting) <= {'event', 'title', 'date', 'period'}
@@ -254,7 +256,9 @@ def _literal_explicit_mutation(message, memory, default_zone, clock):
             return None
         if (not title.strip() or re.search(r'\b(?:hoje|amanhã|amanha)\b', title, re.IGNORECASE)
                 or _plain(title) in {'tudo', 'todos', 'todas', 'todos os eventos', 'todas as entrevistas',
-                    'o primeiro', 'a primeira', 'o evento', 'esse evento', 'essa entrevista', 'este evento', 'esta entrevista'}):
+                    'o primeiro', 'a primeira', 'o evento', 'esse evento', 'essa entrevista', 'este evento', 'esta entrevista',
+                    'o compromisso', 'esse compromisso', 'este compromisso', 'a entrevista', 'a reuniao',
+                    'essa reuniao', 'esta reuniao', 'aquele evento', 'aquela entrevista', 'aquele compromisso'}):
             return None
         zone = load_zone(zone_name)
         day = None
@@ -319,7 +323,7 @@ def _question(reason, field_name='request', *, action=None, missing=None, invali
     elif reason == 'event_changed':
         question = 'Esse compromisso mudou desde a busca. Confira os dados atuais e selecione a opção novamente.'
     elif reason == 'event_not_found':
-        question = 'Não encontrei esse compromisso. Confira o identificador ou informe o título e a data.'
+        question = 'Não encontrei esse compromisso. Pode conferir o nome?'
     elif reason == 'too_many_candidates':
         question = 'Encontrei muitos compromissos. Informe um título mais específico ou um período menor.'
     elif reason == 'unclear_answer':
@@ -511,18 +515,16 @@ class AgentDialogueService:
     def _respond(self, message, memory):
         message = validate_preview_message(message, max_input_chars=self._max_input_chars)
         memory = validate_memory(memory)
-        # Pedidos completos de reagendamento usam os dados literais; a seleção
-        # fresca, as validações e a confirmação continuam no preparador comum.
+        # Gemini interpreta primeiro. A extração literal só confere dados claros
+        # ou recupera uma falha; ela não escolhe um ID nem autoriza a execução.
         literal = _literal_explicit_mutation(message, memory, self._time_zone, self._clock)
-        if literal is not None and literal['action'] == 'reschedule':
-            return self._prepare_title_mutation(literal, memory)
         try:
             plan = _validated_plan(self._model.plan_dialogue(instructions=self._instructions(memory), message=message))
         except ModelError:
             # A gramática restrita de exclusão só recupera falha de interpretação;
             # planos válidos por ID ou seleção explícita mantêm o caminho original.
-            if literal is not None and literal['action'] == 'delete':
-                return self._prepare_title_mutation(literal, memory)
+            if literal is not None and literal['action'] in {'reschedule', 'delete'}:
+                return self._prepare(literal, memory)
             raise
         pending = memory.pending_request
         action = pending.fields.get('action') if pending is not None else None
@@ -535,7 +537,7 @@ class AgentDialogueService:
             literal = _literal_explicit_mutation(message, memory, self._time_zone, self._clock)
             if (literal is not None and literal['action'] == 'delete'
                     and plan.arguments['reason'] == 'unsupported_request'):
-                return self._prepare_title_mutation(literal, memory)
+                return self._prepare(literal, memory)
             if (literal is not None
                     and (plan.arguments['reason'] == 'unclear_answer'
                          and plan.arguments['field'] in {'event', 'title', 'date', 'request'}
@@ -544,7 +546,7 @@ class AgentDialogueService:
                 fields.setdefault('time_zone', self._time_zone)
                 # Passar pelo preparador existente refaz list/get e conserva
                 # múltiplos candidatos como pergunta, mesmo havendo seleção antiga.
-                return self._prepare_title_mutation(fields, memory)
+                return self._prepare(fields, memory)
             result = _question(plan.arguments['reason'], plan.arguments['field'], action=action)
             fields = dict(pending.fields) if pending is not None else {}
             ambiguous = None
@@ -576,13 +578,19 @@ class AgentDialogueService:
         if args['mode'] == 'continue':
             patch = _preserve_reschedule_target(message, pending, patch)
         literal = _literal_explicit_mutation(message, memory, self._time_zone, self._clock)
-        if (literal is not None and literal['action'] != 'delete'
-                and patch.get('action', literal['action']) == literal['action'] and args['ambiguous_field'] is None):
+        literal_selector = (literal is not None and (
+            literal['action'] != 'delete' or (not patch.get('event_id')
+            and (patch.get('search_title') is None
+                 or normalized_title(patch['search_title']) == normalized_title(literal['search_title'])))))
+        if (literal_selector and patch.get('action', literal['action']) == literal['action']
+                and args['ambiguous_field'] is None):
             # Um título explícito neste turno exige busca fresca, mesmo que o
             # modelo proponha reutilizar uma seleção de leitura anterior.
             args = dict(args)
             args['use_selected_event'] = False
             patch.pop('event_id', None)
+            patch.pop('date', None)
+            patch.pop('period', None)
             patch['search_title'] = literal['search_title']
             for name, value in literal.items():
                 patch[name] = value
@@ -606,6 +614,25 @@ class AgentDialogueService:
         elif set(patch) & {'search_title', 'date', 'period'}:
             fields.pop('event_id', None)
         fields.update(patch)
+        if fields.get('search_title') and fields.get('action') in {'edit', 'reschedule', 'delete'}:
+            source_text = _plain(message)
+            if fields['action'] == 'reschedule':
+                source_text = re.split(r'\b(?:para|pra|pro)\b', source_text, maxsplit=1)[0]
+            elif fields['action'] == 'edit':
+                source_text = re.split(r'\bpara\b', source_text, maxsplit=1)[0]
+            # “Reunião de segunda” pode ser o nome; palavras do título não
+            # autorizam transformar a memória em filtro de data.
+            source_text = source_text.replace(_plain(fields['search_title']), ' ', 1)
+            explicit_filter = re.search(r'[0-9]{1,4}[-/][0-9]{1,2}[-/][0-9]{1,4}|\b(?:hoje|amanha|ontem|semana|mes|segunda|terca|quarta|quinta|sexta|sabado|domingo)\b', source_text)
+            if not explicit_filter:
+                for name in ('date', 'period'):
+                    # Um filtro informado em um turno anterior do MESMO pedido
+                    # continua válido. A última consulta não cria esse filtro.
+                    if args['mode'] == 'continue' and pending is not None and name in pending.fields:
+                        fields[name] = pending.fields[name]
+                    elif not (args['mode'] == 'continue' and pending is not None
+                              and name in pending.awaiting):
+                        fields.pop(name, None)
         if args['mode'] == 'continue' and fields.get('action') == 'create' and 'date' in patch:
             # Alterar a âncora exige novos horários absolutos. Conservar apenas
             # start/end que foram extraídos da própria mensagem deste turno.
@@ -638,44 +665,7 @@ class AgentDialogueService:
             next_pending = validate_pending_request(PendingRequest(fields, ('time_zone',)))
             return validate_dialogue_result(result), replace(memory, pending_request=next_pending)
         validate_pending_request(PendingRequest(fields))
-        return self._prepare_title_mutation(fields, memory)
-
-    def _prepare_title_mutation(self, fields, memory):
-        # Um reagendamento pode mover o evento para fora da última consulta.
-        # O ID lembrado orienta somente a data da busca, nunca desempata títulos.
-        fields = dict(fields)
-        action = fields.get('action')
-        if action not in {'edit', 'reschedule', 'delete'} or not fields.get('search_title') or fields.get('event_id'):
-            return self._prepare(fields, memory)
-        if not fields.get('date'):
-            # Dados inválidos ou outros campos ausentes são esclarecidos antes
-            # de depender de uma leitura externa para recuperar apenas a data.
-            checked = RequestPreparationService(_ValidationGateway(), default_time_zone=self._time_zone).prepare(fields)
-            if checked.invalid_fields or set(checked.missing_fields) - {'date'}:
-                return self._prepare(fields, memory)
-        if not fields.get('date') and memory.selected_event_id is not None:
-            zone_name = fields.get('time_zone', self._time_zone)
-            try:
-                with self._gateway_factory() as gateway:
-                    lookup = gateway.get_event(memory.selected_event_id, time_zone=zone_name)
-                event = lookup.event
-                if (event is not None and event.event_id == memory.selected_event_id
-                        and event.status in {'confirmed', 'tentative'}
-                        and normalized_title(event.title) == normalized_title(fields['search_title'])):
-                    if event.all_day:
-                        current_day = date.fromisoformat(event.start)
-                    else:
-                        current_start = datetime.fromisoformat(event.start)
-                        if current_start.utcoffset() is None:
-                            raise ValueError('Horário atual sem fuso.')
-                        current_day = current_start.astimezone(load_zone(zone_name)).date()
-                    fields['date'] = current_day.isoformat()
-                    fields.setdefault('period', memory.last_list['period'] if memory.last_list is not None else 'day')
-            except CalendarSetupError:
-                return DialogueResult('failed', action, 'O acesso à agenda está indisponível.', None, 503, 'calendar_setup_unavailable'), memory
-            except Exception:
-                return DialogueResult('failed', action, 'Não foi possível conferir o compromisso antes de continuar.', None, 502, 'operation_failed'), memory
-        return self._prepare(_last_list_selector(fields, memory), memory)
+        return self._prepare(fields, memory)
 
     def _keep_question(self, memory, result, *, clear_candidates=False):
         pending = memory.pending_request

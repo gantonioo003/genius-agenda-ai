@@ -109,8 +109,8 @@ class RequestPreparationTests(unittest.TestCase):
             ({"action": "create"}, {"title", "start", "end"}),
             ({"action": "create", "title": "  ", "start": None}, {"title", "start", "end"}),
             ({"action": "reschedule", "event_id": EVENT_ID}, {"start", "end"}),
-            ({"action": "reschedule", "search_title": "entrevista"}, {"start", "end", "date"}),
-            ({"action": "delete"}, {"search_title", "date"}),
+            ({"action": "reschedule", "search_title": "entrevista"}, {"start", "end"}),
+            ({"action": "delete"}, {"search_title"}),
             ({"action": "edit", "event_id": EVENT_ID, "title": None}, {"changes"}),
             ({"action": "list"}, {"date"}),
         )

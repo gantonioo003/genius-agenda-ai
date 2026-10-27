@@ -5,6 +5,9 @@ import re
 import unicodedata
 from uuid import UUID
 
+from app.action_language import (ACTION_VERBS, AMBIGUOUS_CHANGE_VERBS,
+    EXPLICIT_REQUEST_PREFIX, has_multiple_mutations, normalize_action_text,
+    starts_new_mutation)
 from app.agent_query_contract import QueryPlan
 from app.api_agent_queries import _validate_result as validate_query_result
 from app.confirmation_state import ConfirmationError
@@ -24,9 +27,11 @@ from app.chat_formatting import event_interval, visible_zone_label
 MAX_REPLY_CHARS = 3500
 _ACTIONS = {'create', 'edit', 'reschedule'}
 _FIELDS = {'title':'Título', 'description':'Descrição', 'location':'Local'}
-_VERBS = {'create': r'(?:agende|agendar|marque|marcar|crie|criar|cadastre|cadastrar)',
-          'edit': r'(?:edite|editar|altere|alterar|atualize|atualizar|troque|trocar)',
-          'reschedule': r'(?:reagende|reagendar|remarque|remarcar|mova|mover|troque|trocar)'}
+_VERBS = ACTION_VERBS
+_EXPLICIT_STARTS = {action: re.compile(r'^' + EXPLICIT_REQUEST_PREFIX + verb + r'\b\s+\S')
+                    for action, verb in _VERBS.items()}
+_AMBIGUOUS_EDIT = re.compile(r'^' + EXPLICIT_REQUEST_PREFIX + AMBIGUOUS_CHANGE_VERBS + r'\b')
+_NOMINAL_CHANGE = re.compile(r'^' + EXPLICIT_REQUEST_PREFIX + r'(?:troca|ajuste)\s+(?:de|do|da|dos|das)\b')
 _DURATION = re.compile(r'\b(?:duracao(?: de)?|durante|por|com|de)\s+(\d{1,3})\s*(min(?:uto)?s?|h(?:ora)?s?)\b')
 
 @dataclass(frozen=True, repr=False)
@@ -63,7 +68,7 @@ def validate_agent_turn(turn):
 
 
 def _normalized(message):
-    return ' '.join(''.join(c for c in unicodedata.normalize('NFKD',message.casefold()) if not unicodedata.combining(c)).split())
+    return normalize_action_text(message)
 
 
 def _restricted(message):
@@ -71,38 +76,39 @@ def _restricted(message):
     # imperativo anular uma negação, hipótese ou pedido de mera preparação.
     # Falsos positivos em nomes/títulos seguem para prévia, sem escrita.
     value=_normalized(message)
-    return bool(re.search(r'\b(?:nao|nem|sem|se|apenas|somente|so|talvez|hipoteticamente|hipotese|simulacao|simular|simule|simulando|exemplo|previa|rascunho|demonstracao|demonstre|aguarde|aguardar|espere|esperar|antes|quando|confirmacao|confirmar|aprovacao|aprovar|revisao|revise|revisar|confira|conferir)\b',value))
+    return bool(re.search(r'\b(?:nao|naum|n|nunca|nem|sem|se|caso|suponha|supondo|sera|seria|poderia|podia|conseguiria|apenas|somente|so|talvez|hipoteticamente|hipotese|simulacao|simular|simule|simulando|exemplo|previa|rascunho|demonstracao|demonstre|aguarde|aguardar|espere|esperar|antes|quando|confirmacao|confirmar|aprovacao|aprovar|revisao|revise|revisar|confira|conferir)\b',value))
 
 
 def _question(message):
     value=_normalized(message)
     return ('?' in value or _restricted(message)
-            or bool(re.match(r'^(?:como|sera|seria|se |talvez|suponha|hipoteticamente|e se|nao\b|nunca\b)',value))
+            or bool(re.match(r'^(?:como|sera|seria|se |talvez|suponha|hipoteticamente|e se|nao\b|nunca\b|'
+                r'(?:(?:por favor|por gentileza|favor|pfv|pfvr)[,\s]+)?(?:(?:voce|vc)\s+)?'
+                r'(?:pode|poderia|consegue|conseguiria|podia|posso|podemos)\b)',value))
             or message.lstrip().startswith(('"',"'",'“','‘','`')))
 
 
 def explicit_action(message, action):
     """Sinal conservador do texto atual; o resultado ready sozinho não autoriza."""
-    if action not in _ACTIONS or _question(message):
+    if action not in _ACTIONS or _question(message) or _multiple_mutations(message):
         return False
     value=_normalized(message)
-    verb=_VERBS[action]
-    prefix=r'(?:(?:por favor|favor)[, ]+)?'
-    if re.match(prefix+verb+r'\b\s+\S',value):
-        return True
-    return bool(re.match(prefix+r'(?:eu )?(?:quero|gostaria de|preciso(?: de)?)\s+'+verb+r'\b\s+\S',value))
+    if _NOMINAL_CHANGE.match(value):
+        return False
+    if action=='edit' and _AMBIGUOUS_EDIT.match(value):
+        # Um horário não pode virar título só porque o modelo escolheu edit.
+        if not re.search(r'\b(?:titulo|nome|descricao|local)\b',value):
+            return False
+    return _EXPLICIT_STARTS[action].match(value) is not None
 
 
 def _new_intent(message):
-    value=_normalized(message)
-    verbs='|'.join(_VERBS.values())+r'|exclua|excluir|apague|apagar|remova|remover'
-    return bool(re.match(r'^(?:(?:por favor|favor)[, ]+)?(?:(?:eu )?(?:quero|gostaria de|preciso(?: de)?)\s+)?(?:'+verbs+r')\b',value))
+    return starts_new_mutation(message)
 
 
 def _multiple_mutations(message):
     # O modelo não pode escolher uma das escritas de um pedido composto.
-    verbs='|'.join(_VERBS.values())+r'|exclua|excluir|apague|apagar|remova|remover'
-    return len(re.findall(r'\b(?:'+verbs+r')\b',_normalized(message)))>1
+    return has_multiple_mutations(message)
 
 
 def _event_id_literal(event_id, message):

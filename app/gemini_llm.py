@@ -9,10 +9,10 @@ import json
 import math
 
 import requests
-from requests.adapters import HTTPAdapter
 
 from app.agent_query_contract import QUERY_TOOLS, QueryPlan
 from app.dialogue_contract import DIALOGUE_TOOLS, DialoguePlan
+from app.gemini_transport import gemini_session
 from app.llm import (
     MAX_DIALOGUE_ARGUMENT_BYTES, MAX_QUERY_ARGUMENT_BYTES, MAX_REPLY_CHARACTERS,
     MAX_RESPONSE_BYTES, ModelError, ModelReply, _KEY, _MODEL,
@@ -24,6 +24,27 @@ from app.llm import (
 GENERATE_CONTENT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models/"
 MIN_OUTPUT_TOKENS = 128
 MAX_OUTPUT_TOKENS = 4096
+_PREPARE_CORE_FIELDS = frozenset({"mode", "action", "use_selected_event"})
+
+
+def _optional_prepare_fields(name, schema):
+    """Só o preparo Gemini pode omitir campos cujo contrato original aceita null."""
+    if name != "prepare_request":
+        return ()
+    properties = schema["properties"]
+    return tuple(field for field in schema["required"]
+                 if field not in _PREPARE_CORE_FIELDS
+                 and isinstance(properties[field].get("type"), list)
+                 and "null" in properties[field]["type"])
+
+
+def _gemini_parameters(tool):
+    """Adaptar uma cópia; os schemas canônicos e o fornecedor OpenAI não mudam."""
+    schema = deepcopy(tool["parameters"])
+    optional = _optional_prepare_fields(tool["name"], schema)
+    if optional:
+        schema["required"] = [field for field in schema["required"] if field not in optional]
+    return schema
 
 
 def _response(raw: bytes, configured_model: str):
@@ -137,7 +158,14 @@ def _parse_plan(raw: bytes, configured_model: str, *, tools, max_argument_bytes,
             raise ValueError()
         arguments = call.get("args")
         schema = schemas[name]
-        if not isinstance(arguments, dict) or set(arguments) != set(schema["required"]):
+        if not isinstance(arguments, dict):
+            raise ValueError()
+        if plan_type is DialoguePlan and name == "prepare_request":
+            # Omissão significa ausência de novos dados, como null no
+            # contrato original. Nunca preencher ação, modo ou escolha de evento.
+            optional = _optional_prepare_fields(name, schema)
+            arguments = {**{field: None for field in optional}, **arguments}
+        if set(arguments) != set(schema["required"]):
             raise ValueError()
         argument_bytes = json.dumps(arguments, ensure_ascii=False, allow_nan=False).encode("utf-8")
         if not 1 <= len(argument_bytes) <= max_argument_bytes:
@@ -171,7 +199,7 @@ class GeminiModel:
             self._model = model
             self._timeout_seconds = float(timeout_seconds)
             self._max_output_tokens = max_output_tokens
-            self._session_factory = requests.Session if session_factory is None else session_factory
+            self._session_factory = session_factory
         except Exception:
             raise ModelError() from None
 
@@ -192,7 +220,7 @@ class GeminiModel:
             # additionalProperties. Campos próprios de Responses não são enviados.
             payload["tools"] = [{"functionDeclarations": [
                 {"name": tool["name"], "description": tool["description"],
-                 "parametersJsonSchema": deepcopy(tool["parameters"])} for tool in tools
+                 "parametersJsonSchema": _gemini_parameters(tool)} for tool in tools
             ]}]
             payload["toolConfig"] = {"functionCallingConfig": {
                 "mode": "ANY", "allowedFunctionNames": [tool["name"] for tool in tools],
@@ -217,9 +245,7 @@ class GeminiModel:
 
     def _request(self, payload: dict) -> bytes:
         try:
-            with self._session_factory() as session:
-                session.trust_env = False
-                session.mount("https://", HTTPAdapter(max_retries=0))
+            with gemini_session(self._session_factory) as session:
                 with session.post(
                     GENERATE_CONTENT_BASE_URL + self._model + ":generateContent",
                     headers={"x-goog-api-key": self._api_key,

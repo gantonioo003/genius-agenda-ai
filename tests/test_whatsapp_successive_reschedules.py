@@ -73,6 +73,8 @@ class WhatsAppSuccessiveReschedulesTests(unittest.TestCase):
         self.assertEqual(self.memory(listed).last_list['date'], '2026-10-27')
         self.assertFalse(self.writes())
 
+        self.model.plan = legacy.plan(action='reschedule', search_title=TITLE,
+                                      start=FIRST_START, end=FIRST_END)
         first = self.turn(
             'Reagende Entrevista Projeto para 26/10/2026 das 19h32 às 20h02.', listed)
         self.assert_reschedule_preview(first, FIRST_START, FIRST_END, writes=0)
@@ -88,23 +90,25 @@ class WhatsAppSuccessiveReschedulesTests(unittest.TestCase):
         # Reiniciar o serviço força o segundo pedido a usar o contexto persistido.
         self.service = self.make_service()
         calls_before_second = len(self.gateway.calls)
+        self.model.plan = legacy.plan(action='reschedule', search_title=TITLE,
+                                      start=SECOND_START, end=SECOND_END)
         second = self.turn(
             'Reagende Entrevista Projeto para 26/10/2026 das 18h48 às 19h18.', moved)
         self.assert_reschedule_preview(second, SECOND_START, SECOND_END, writes=1)
         self.assertEqual((self.gateway.current.start, self.gateway.current.end),
                          (FIRST_START, FIRST_END))
         second_calls = self.gateway.calls[calls_before_second:]
-        self.assertEqual([call[0] for call in second_calls[:3]],
-                         ['lookup', 'list', 'lookup'])
-        searched_days = [call[1].start.date().isoformat()
-                         for call in second_calls if call[0] == 'list']
-        self.assertEqual(searched_days, ['2026-10-26'])
+        self.assertEqual([call[0] for call in second_calls[:2]], ['search', 'lookup'])
+        self.assertEqual([call for call in second_calls if call[0] == 'search'],
+                         [('search', TITLE, legacy.ZONE)])
+        self.assertFalse([call for call in second_calls if call[0] == 'list'])
         moved_again = self.turn('sim', second)
         self.assertEqual(moved_again.mutation_state, 'confirmed')
         self.assertEqual(self.gateway.current,
                          replace(original, start=SECOND_START, end=SECOND_END))
         self.assertEqual(len(self.writes()), 2)
 
+        self.model.plan = legacy.plan(action='delete', search_title=TITLE)
         deletion = self.turn('Exclua Entrevista Projeto.', moved_again)
         self.assertEqual((deletion.status, deletion.action),
                          ('needs_confirmation', 'delete'))

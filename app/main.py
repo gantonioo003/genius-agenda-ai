@@ -57,8 +57,12 @@ def create_app(config: Settings | None = None, db: Database | None = None, *,
         try:
             yield
         finally:
-            if worker is not None:
-                await run_in_threadpool(worker.stop)
+            try:
+                if worker is not None:
+                    await run_in_threadpool(worker.stop)
+            finally:
+                from app.gemini_transport import close_gemini_transport
+                await run_in_threadpool(close_gemini_transport)
 
     application = FastAPI(
         title=config.app_name,

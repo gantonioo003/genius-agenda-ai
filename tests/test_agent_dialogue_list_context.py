@@ -1,4 +1,5 @@
-"""Título literal e contexto válido refazem busca; não adivinham ID/data."""
+"""O título basta para refazer a busca global, independentemente do contexto."""
+from dataclasses import replace
 import unittest
 
 import test_agent_dialogue as legacy
@@ -31,40 +32,44 @@ class DialogueListContextTests(unittest.TestCase):
         self.assertEqual((result.status, result.action), ('ready', 'edit'))
         self.assertEqual(result.data['parameters']['description'], NOTES)
         self.assertEqual(result.data['parameters']['event_id'], 'FixtureExact0')
-        self.assertEqual([call[0] for call in self.gateway.calls], ['get', 'list', 'get'])
-        self.assertEqual(next(call for call in self.gateway.calls if call[0] == 'list')[1].start.date().isoformat(), '2030-06-17')
+        self.assertEqual(self.gateway.calls, [('search', TITLE, legacy.ZONE), ('get', 'FixtureExact0', legacy.ZONE)])
+        self.assertEqual(len(self.model.calls), 1)
         self.assertFalse(result.data['execution_allowed'])
         self.assertEqual(memory.pending_request.fields['description'], NOTES)
 
-    def test_prepare_patch_missing_date_reuses_last_period_without_selecting_old_id(self):
+    def test_prepare_patch_missing_date_searches_globally_without_reusing_last_period(self):
         self.set_events()
         self.model.plan = legacy.plan(action='edit', search_title=TITLE, description='Descrição atualizada')
         memory = QueryMemory(last_list={'date': '2030-06-17', 'period': 'month', 'time_zone': legacy.ZONE})
         result, _ = self.service.respond('Altere a descrição de ' + TITLE + ' para Descrição atualizada', memory)
         self.assertEqual(result.status, 'ready')
-        period = self.gateway.calls[0][1]
-        self.assertEqual((period.start.date().isoformat(), period.end.date().isoformat()), ('2030-06-01', '2030-07-01'))
+        self.assertEqual(self.gateway.calls, [('search', TITLE, legacy.ZONE), ('get', 'FixtureExact0', legacy.ZONE)])
 
-    def test_missing_or_expired_context_preserves_literal_title_and_asks_only_date(self):
+    def test_missing_or_expired_context_preserves_literal_title_and_searches_globally(self):
+        self.set_events()
         self.model.plan = legacy.plan('ask_dialogue', reason='unclear_answer', field='event')
         for connector in ('de', 'do', 'da'):
             message = f'Altere descrição {connector} {TITLE} para {NOTES}'
             result, memory = self.service.respond(message, self.memory(listed=False))
-            self.assertEqual(result.status, 'needs_clarification')
-            self.assertEqual(result.data['missing_fields'], ['date'])
-            self.assertNotIn('título', result.message.lower())
-            self.assertEqual(memory.pending_request.fields['search_title'], TITLE)
-        self.assertEqual(self.factory.opened, 0)
+            self.assertEqual(result.status, 'ready')
+            self.assertEqual(result.data['parameters']['event_id'], 'FixtureExact0')
+            self.assertEqual(result.data['parameters']['description'], NOTES)
+            self.assertEqual(self.gateway.calls[-2:], [('search', TITLE, legacy.ZONE), ('get', 'FixtureExact0', legacy.ZONE)])
+        self.assertEqual(len(self.model.calls), 3)
 
-    def test_two_fresh_candidates_keep_selection_question_without_guessing_first(self):
+    def test_cross_date_candidates_keep_selection_question_without_guessing_first(self):
         self.set_events(2)
+        second = replace(self.gateway.events[1], start='2040-09-01T10:00:00-03:00',
+                         end='2040-09-01T10:30:00-03:00')
+        self.gateway.events = (self.gateway.events[0], second)
+        self.gateway.lookups[second.event_id] = second
         self.model.plan = legacy.plan('ask_dialogue', reason='ambiguous_information', field='event')
         result, memory = self.service.respond(MESSAGE, self.memory())
         self.assertEqual((result.status, result.data['reason']), ('needs_clarification', 'event_selection'))
         self.assertEqual(len(result.data['candidates']), 2)
         self.assertEqual(len(memory.pending_request.candidates), 2)
         self.assertIsNone(result.data['parameters'])
-        self.assertEqual([call[0] for call in self.gateway.calls], ['get', 'list'])
+        self.assertEqual(self.gateway.calls, [('search', TITLE, legacy.ZONE)])
 
     def test_explicit_ambiguous_date_or_multiple_requests_never_borrows_context(self):
         self.model.plan = legacy.plan(action='edit', search_title=TITLE, description=NOTES, ambiguous_field='date')
@@ -82,7 +87,7 @@ class DialogueListContextTests(unittest.TestCase):
         result, _ = self.service.respond(MESSAGE, self.memory())
         self.assertEqual(result.status, 'ready')
         self.assertEqual(result.data['parameters']['event_id'], 'FixtureExact0')
-        self.assertEqual([call[0] for call in self.gateway.calls], ['get', 'list', 'get'])
+        self.assertEqual(self.gateway.calls, [('search', TITLE, legacy.ZONE), ('get', 'FixtureExact0', legacy.ZONE)])
         self.assertTrue(self.model.plan.arguments['use_selected_event'])
         # Uma ambiguidade já apresentada continua exigindo escolha explícita.
         from app.dialogue_state import CandidateReference

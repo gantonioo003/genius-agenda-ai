@@ -35,6 +35,9 @@ class _DeferredCalendar:
     def get_event(self, event_id, *, time_zone):
         return self._get_gateway().get_event(event_id, time_zone=time_zone)
 
+    def search_events_by_title(self, title, *, time_zone):
+        return self._get_gateway().search_events_by_title(title, time_zone=time_zone)
+
 
 def _unique_object(pairs):
     result = {}

@@ -31,6 +31,9 @@ class _ValidationGateway:
     def get_event(self, *_args, **_kwargs):
         raise _SelectionRequired()
 
+    def search_events_by_title(self, *_args, **_kwargs):
+        raise _SelectionRequired()
+
 
 def _unique(pairs):
     value = {}

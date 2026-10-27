@@ -25,6 +25,7 @@ class EventSelection:
 
 class EventSelectionGateway(Protocol):
     def list_events(self, period: CalendarPeriod) -> CalendarListing: ...
+    def search_events_by_title(self, title: str, *, time_zone: str) -> CalendarListing: ...
     def get_event(self, event_id: str, *, time_zone: str) -> EventLookup: ...
 
 
@@ -52,11 +53,10 @@ def validate_selection(
         return None
     if not isinstance(title, str) or not normalized_title(title):
         raise ValueError("Informe um título ou o ID do evento.")
-    if period is None:
-        raise ValueError("A busca por título precisa de uma data e período de referência.")
-    validate_period(period)
-    if period.time_zone != time_zone:
-        raise ValueError("O fuso da seleção deve ser o mesmo do período consultado.")
+    if period is not None:
+        validate_period(period)
+        if period.time_zone != time_zone:
+            raise ValueError("O fuso da seleção deve ser o mesmo do período consultado.")
     return normalized_title(title)
 
 
@@ -75,18 +75,27 @@ class EventSelectionService:
             lookup = self.gateway.get_event(event_id, time_zone=time_zone)
             return self._from_lookup(lookup, event_id)
 
-        listing = self.gateway.list_events(period)
-        matches = tuple(event for event in listing.events
-                        if event.status != "cancelled" and needle in normalized_title(event.title))
+        listing = (self.gateway.list_events(period) if period is not None else
+                   self.gateway.search_events_by_title(title, time_zone=time_zone))
+        matching_ids = {}
+        for event in listing.events:
+            if event.status == "cancelled" or needle not in normalized_title(event.title):
+                continue
+            previous = matching_ids.get(event.event_id)
+            if previous is not None and previous != event:
+                raise CalendarOperationError("O compromisso mudou durante a busca; nenhum evento foi selecionado.")
+            matching_ids[event.event_id] = event
+        matches = tuple(matching_ids.values())
         if not matches:
             return EventSelection(
                 "not_found", listing.calendar_name, None,
-                question="Não encontrei esse compromisso no período. Pode conferir a data e o título?",
+                question=("Não encontrei esse compromisso no período. Pode conferir a data e o título?"
+                          if period is not None else "Não encontrei esse compromisso. Pode conferir o título?"),
             )
         if len(matches) > 1:
             return EventSelection(
                 "needs_clarification", listing.calendar_name, None, candidates=matches,
-                question="Encontrei mais de um compromisso. Qual deles? Informe o ID da opção desejada.",
+                question="Encontrei mais de um compromisso com esse título. Qual deles deseja usar?",
             )
 
         # Não tratar uma lista anterior como confirmação de que o evento segue igual.
@@ -100,7 +109,7 @@ class EventSelectionService:
         if any(getattr(current, field) != getattr(previous, field) for field in fields):
             return EventSelection(
                 "needs_clarification", lookup.calendar_name, None, candidates=(current,),
-                question="O compromisso mudou desde a busca. Confira os dados e informe o ID para selecioná-lo novamente.",
+                question="O compromisso mudou desde a busca. Confira os dados para selecioná-lo novamente.",
             )
         return result
 
@@ -109,7 +118,7 @@ class EventSelectionService:
         if lookup.event is None or lookup.event.status == "cancelled":
             return EventSelection(
                 "not_found", lookup.calendar_name, None,
-                question="Esse evento não está disponível na agenda de teste. Pode consultar novamente e conferir o ID?",
+                question="Esse compromisso não está disponível na agenda. Pode consultar novamente?",
             )
         if lookup.event.event_id != expected_id or lookup.event.status not in ("confirmed", "tentative"):
             raise CalendarOperationError("Não foi possível confirmar a identidade e o estado do evento.")

@@ -43,7 +43,7 @@ from app.services.interviews import (
     InterviewDraft,
     validate_interview,
 )
-from app.services.event_selection import EventLookup, validate_event_id
+from app.services.event_selection import EventLookup, normalized_title, validate_event_id
 from app.services.rescheduling import RescheduleResult, ScheduleChange, validate_schedule_change
 from app.services.event_details import DetailsChange, DetailsResult, EventDetails, validate_details_change
 from app.services.event_deletion import (
@@ -824,6 +824,130 @@ class GoogleCalendarGateway:
         except (KeyError, TypeError, ValueError):
             raise CalendarOperationError(
                 "A resposta do Google não contém um evento válido; nenhum evento foi selecionado."
+            ) from None
+
+    TITLE_SEARCH_MAX_PAGES = 100
+    TITLE_SEARCH_AMBIGUITY_LIMIT = 21
+
+    def search_events_by_title(
+        self, title: str, *, time_zone: str = "America/Recife",
+    ) -> CalendarListing:
+        """Buscar em toda a agenda; uma leitura incompleta nunca prova unicidade."""
+        zone = load_zone(time_zone)
+        if not isinstance(title, str) or not normalized_title(title):
+            raise ValueError("Informe um título para buscar o compromisso.")
+        needle = normalized_title(title)
+        try:
+            calendar = resolve_calendar(self.service)
+            calendar_zone = load_zone(calendar.get("timeZone") or time_zone)
+            events = self.service.events()
+            collected: dict[str, tuple[datetime, AgendaEvent]] = {}
+            observed: dict[str, dict] = {}
+            masters: dict[str, None] = {}
+            page_count = 0
+            fields = "items(id,summary,status,start,end,htmlLink,recurrence,recurringEventId,originalStartTime),nextPageToken"
+
+            def pages(master_id: str | None = None) -> Iterator[list[dict]]:
+                nonlocal page_count
+                page_token, seen_tokens = None, {None}
+                while True:
+                    if page_count >= self.TITLE_SEARCH_MAX_PAGES:
+                        raise CalendarOperationError(
+                            "A busca por título excedeu o limite de páginas e não foi concluída. "
+                            "Informe o ID ou uma data para refinar a busca."
+                        )
+                    page_count += 1
+                    arguments = {
+                        "calendarId": calendar["id"], "timeZone": time_zone,
+                        "showDeleted": False, "maxResults": 250,
+                        "pageToken": page_token, "fields": fields,
+                    }
+                    # q pesquisa outros campos e não tem a mesma semântica da
+                    # comparação local. Nenhum filtro de data pode provar que
+                    # um título é único em toda a agenda.
+                    request = (
+                        events.list(singleEvents=False, showHiddenInvitations=True, **arguments)
+                        if master_id is None else
+                        events.instances(eventId=master_id, **arguments)
+                    )
+                    page = request.execute(num_retries=2)
+                    if not isinstance(page, dict) or not isinstance(page.get("items", []), list):
+                        raise ValueError("Página inválida na busca por título.")
+                    next_token = page.get("nextPageToken")
+                    if next_token not in (None, ""):
+                        if (not isinstance(next_token, str) or not next_token.strip()
+                                or next_token in seen_tokens):
+                            raise ValueError("Paginação inválida na busca por título.")
+                        seen_tokens.add(next_token)
+                    yield page.get("items", [])
+                    if next_token is None or next_token == "":
+                        return
+                    page_token = next_token
+
+            def collect(item: dict, master_id: str | None = None) -> None:
+                if not isinstance(item, dict):
+                    raise ValueError("Evento inválido na busca por título.")
+                event_id = item.get("id")
+                validate_event_id(event_id)
+                previous = observed.get(event_id)
+                if previous is not None and previous != item:
+                    raise ValueError("O evento mudou durante a busca por título.")
+                observed[event_id] = item
+                if item.get("status") == "cancelled":
+                    return
+                if item.get("status") not in ("confirmed", "tentative"):
+                    raise ValueError("Estado desconhecido na busca por título.")
+                recurrence = item.get("recurrence", [])
+                if (not isinstance(recurrence, list)
+                        or any(not isinstance(rule, str) or not rule.strip() for rule in recurrence)):
+                    raise ValueError("Recorrência inválida na busca por título.")
+                recurring_id = item.get("recurringEventId")
+                if recurring_id is not None:
+                    validate_event_id(recurring_id)
+                    if recurrence:
+                        raise ValueError("Uma ocorrência não pode ser uma série recorrente.")
+                if ("originalStartTime" in item
+                        and not isinstance(item["originalStartTime"], dict)):
+                    raise ValueError("Origem inválida de ocorrência recorrente.")
+                if master_id is not None and (recurrence or recurring_id != master_id):
+                    raise ValueError("A resposta não confirma a série da ocorrência.")
+                start_utc, _, entry = self._read_event(item, zone, calendar_zone)
+                if needle not in normalized_title(entry.title):
+                    return
+                if recurrence:
+                    masters[event_id] = None
+                else:
+                    collected[event_id] = (start_utc, entry)
+
+            def listing() -> CalendarListing:
+                ordered = sorted(collected.values(), key=lambda value: (value[0], value[1].event_id))
+                return CalendarListing(calendar["summary"], tuple(entry for _, entry in ordered))
+
+            # singleEvents=False inclui exceções com título próprio, mesmo
+            # quando o título da série não corresponde ao pedido.
+            for items in pages():
+                for item in items:
+                    collect(item)
+                    if len(collected) >= self.TITLE_SEARCH_AMBIGUITY_LIMIT:
+                        return listing()
+            for master_id in masters:
+                for items in pages(master_id):
+                    for item in items:
+                        collect(item, master_id)
+                        if len(collected) >= self.TITLE_SEARCH_AMBIGUITY_LIMIT:
+                            return listing()
+            return listing()
+        except HttpError as exc:
+            raise CalendarOperationError(
+                f"Google recusou a busca por título (HTTP {exc.resp.status}). Nenhum resultado foi confirmado."
+            ) from None
+        except (OSError, httplib2.HttpLib2Error, TransportError):
+            raise CalendarOperationError(
+                "Não foi possível concluir a busca por título. Confira a conexão e tente novamente."
+            ) from None
+        except (KeyError, TypeError, ValueError, OverflowError):
+            raise CalendarOperationError(
+                "A resposta do Google contém dados ou paginação inválidos; busca por título não concluída."
             ) from None
 
     def list_events(self, period: CalendarPeriod) -> CalendarListing:

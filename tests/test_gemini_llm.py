@@ -176,7 +176,7 @@ class GeminiModelTests(unittest.TestCase):
         self.assertNotIn(KEY, json.dumps(options["json"]))
         self.assertTrue(self.session.closed and self.session.response.closed)
 
-    def test_each_turn_opens_fresh_session_without_remote_history(self):
+    def test_injected_factory_keeps_fresh_sessions_and_no_remote_history(self):
         sessions = []
         def factory():
             session = Session()
@@ -212,10 +212,13 @@ class GeminiModelTests(unittest.TestCase):
                 self.assertEqual((plan.input_tokens, plan.output_tokens), (23, 11))
                 body = self.session.calls[0][1]["json"]
                 declarations = body["tools"][0]["functionDeclarations"]
-                self.assertEqual(declarations, [
+                expected = [
                     {"name": tool["name"], "description": tool["description"],
-                     "parametersJsonSchema": tool["parameters"]} for tool in tools
-                ])
+                     "parametersJsonSchema": deepcopy(tool["parameters"])} for tool in tools
+                ]
+                if method == "plan_dialogue":
+                    expected[0]["parametersJsonSchema"]["required"] = ["mode", "action", "use_selected_event"]
+                self.assertEqual(declarations, expected)
                 self.assertEqual(body["toolConfig"], {"functionCallingConfig": {
                     "mode": "ANY", "allowedFunctionNames": [tool["name"] for tool in tools],
                 }})
@@ -270,9 +273,9 @@ class GeminiModelTests(unittest.TestCase):
             with self.subTest(name=name, arguments=arguments):
                 self.assert_error(lambda: self.invoke(self.model(Response(function_payload(name, arguments))), "plan_dialogue"))
 
-    def test_incomplete_prepare_request_is_not_filled_by_adapter(self):
+    def test_incomplete_required_prepare_request_is_not_filled_by_adapter(self):
         arguments = draft_arguments()
-        del arguments["location"]
+        del arguments["mode"]
         self.assert_error(lambda: self.invoke(self.model(Response(function_payload("prepare_request", arguments))), "plan_dialogue"))
 
     def test_multiple_calls_and_text_beside_call_fail_closed(self):

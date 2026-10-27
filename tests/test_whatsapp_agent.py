@@ -26,7 +26,7 @@ from app.services.confirmations import ConfirmationService
 from app.services.confirmation_snapshot import ConfirmationSnapshot
 from app.services.event_deletion import DeletionResult,deletion_confirmation,DeletionVersionError,DeletionBindingError
 from app.services.event_details import EventDetails
-from app.services.event_selection import EventLookup
+from app.services.event_selection import EventLookup,normalized_title
 from app.services.interviews import CreatedInterview,ReconciledCreation
 from app.services.conflicts import CalendarConflictError,build_conflict_report
 from app.services.whatsapp_agent import WhatsAppAgentService,AgentTurn,validate_agent_turn,explicit_action,MAX_REPLY_CHARS
@@ -76,6 +76,11 @@ class Gateway(UpdateGateway):
     def list_events(self,period):
         self.calls.append(('list',period))
         return CalendarListing('Genius Testes',tuple(agenda(event) for event in ([self.current] if self.current else [])+self.pool))
+    def search_events_by_title(self,title,*,time_zone):
+        self.calls.append(('search',title,time_zone))
+        needle=normalized_title(title)
+        events=([self.current] if self.current else [])+self.pool
+        return CalendarListing('Genius Testes',tuple(agenda(event) for event in events if needle in normalized_title(event.title)))
     def get_confirmation_snapshot(self,event_id,*,time_zone):
         self.calls.append(('confirmation',event_id))
         events=([self.current] if self.current else [])+self.pool

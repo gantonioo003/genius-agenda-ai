@@ -5,6 +5,7 @@ Assistente pelo WhatsApp para organizar entrevistas no Google Calendar, com cont
 ## O que funciona
 
 - Criar, consultar, editar, reagendar e excluir eventos pelo WhatsApp.
+- Localizar compromissos pelo nome para editar, reagendar ou excluir; esclarecer nomes repetidos. Gemini interpreta frases variadas e escolhe a operação.
 - Validar datas, fusos, conflitos e pedidos repetidos; confirmar o evento e a alteração antes das operações que exigem aprovação.
 - Enviar card com 1 hora de antecedência e texto com 15 minutos. Estado persistente, sincronização de alterações e bloqueio de resultados incertos.
 - Resumos de semana/mês, horários livres, briefing e checklist factual.
@@ -47,9 +48,9 @@ Configure a chave da API, OAuth Google, Gemini, destinatário autorizado e callb
 .\.venv\Scripts\python.exe -m unittest discover -s tests
 ```
 
-Última suíte Python completa após a revisão de reagendamentos: **2.438 testes aprovados**. **981 verificações JavaScript históricas**; os conjuntos não são somados. [Reagendamentos sucessivos: correção e validação](docs/reagendamentos-sucessivos.md).
+Última suíte Python completa: **2.530 testes aprovados**. **981 verificações JavaScript históricas**; os conjuntos não são somados. [Operações por nome, Gemini e validação](docs/operacoes-por-nome.md).
 
-O acervo local conserva **175 registros: 45 imagens e 130 JSON**. Capturas originais, testes automatizados, aceites do provedor e recebimento humano são provas distintas. [Índice público dos resultados](docs/evidencias.md) · [Ensaio real](docs/ensaio-real-whatsapp.md).
+O acervo local conserva **177 registros: 45 imagens e 132 JSON**. Capturas originais, testes automatizados, aceites do provedor e recebimento humano são provas distintas. [Índice público dos resultados](docs/evidencias.md) · [Ensaio real](docs/ensaio-real-whatsapp.md).
 
 ## Limitações
 

@@ -39,7 +39,7 @@ _LABELS = {
     "end": "a data e o horário de término", "time_zone": "o fuso horário",
     "date": "a data de referência", "search_title": "o título do compromisso que devo procurar",
     "event_id": "o identificador completo do compromisso",
-    "event": "qual compromisso usar (título e data, ou identificador)",
+    "event": "qual compromisso usar (título ou identificador)",
     "changes": "o que deseja alterar: título, descrição ou local",
 }
 
@@ -168,7 +168,10 @@ class RequestPreparationService:
                             invalid.append("search_title")
                         else:
                             selector["title"] = title
-                day_text = required_text("date")
+                # A data limita uma busca somente quando foi informada. Um
+                # período explícito ainda precisa dessa âncora para ser aplicado.
+                needs_date = action == "list" or request.get("period") is not None
+                day_text = required_text("date") if needs_date or request.get("date") is not None else None
                 period_kind = request.get("period", "day")
                 if not isinstance(period_kind, str) or period_kind not in _BUILDERS:
                     invalid.append("period")
@@ -197,7 +200,7 @@ class RequestPreparationService:
                 if schedule_error:
                     question = f"{schedule_error} Pode conferir os horários e o fuso?"
                 elif "event_id" in invalid and any(field in invalid for field in ("search_title", "date", "period")):
-                    question = "Você quer usar o identificador exato ou procurar pelo título e pela data? Informe apenas uma dessas opções."
+                    question = "Você quer usar o identificador exato ou procurar pelo título? Informe apenas uma dessas opções."
                 elif unknown:
                     question = "Não consegui entender uma parte do pedido. Pode reformulá-lo usando os dados da ação desejada?"
                 else:

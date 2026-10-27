@@ -20,3 +20,8 @@ Depois de consultar amanhã e mover a entrevista para hoje, o pedido seguinte ai
 Suíte Python completa: **2438 testes aprovados**, sem falhas ou erros, em 226.713 segundos. O teste de conversa completa usa stores reais temporários e calendário/modelo simulados: consulta amanhã, primeiro reagendamento para hoje, segundo reagendamento e exclusão, com cada escrita condicionada a `sim`.
 
 As regressões também cobrem títulos duplicados, falha de leitura, data de origem explícita, horário de destino em outro dia, título com palavras como “Mudança”, correção explícita e dados inválidos. A captura privada 174 documenta o problema anterior; o relatório 175 registra estes testes. Não houve novo teste humano no WhatsApp nem escritas no Google nesta revisão.
+
+
+## Atualização de 27/10/2026
+
+A seleção foi ampliada para buscar o nome em toda a agenda, sem herdar o período de uma consulta anterior. O comportamento descrito acima é o histórico da correção inicial; o fluxo atual está em [Operações por nome](operacoes-por-nome.md). O destino continua protegido durante esclarecimentos.

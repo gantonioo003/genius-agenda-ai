@@ -492,3 +492,8 @@ Os registros **165–173** encerram a etapa 16: perguntas corrigidas, CRUD real 
 ## Reagendamentos sucessivos
 
 Captura privada 174 do relato original e relatório 175 da suíte atual. [Resultado, escopo e limites](reagendamentos-sucessivos.md). Acervo atualizado: 175 registros, 45 imagens e 130 JSON.
+
+
+## Operações por nome e linguagem natural
+
+Registros privados 176/177: suíte completa atual, Gemini real com frases fictícias e busca Google somente de leitura. [Comportamento e limites de medição](operacoes-por-nome.md). Acervo atualizado: 177 registros, 45 imagens e 132 JSON.

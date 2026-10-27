@@ -93,6 +93,8 @@ class _ValidationGateway:
         raise _SelectionValidated()
     def list_events(self, *_args, **_kwargs):
         raise ValueError()
+    def search_events_by_title(self, *_args, **_kwargs):
+        raise ValueError()
 
 def canonical_parameters(action, parameters):
     """Valida apenas parâmetros prontos; nunca consulta nem aceita busca pendente."""

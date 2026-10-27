@@ -61,6 +61,11 @@ class SuccessiveRescheduleTests(unittest.TestCase):
         self.assertEqual(periods[0].start.date().isoformat(), expected)
         self.assertEqual((periods[0].end - periods[0].start).total_seconds(), 86400)
 
+    def assert_global_search(self):
+        self.assertEqual([call for call in self.gateway.calls if call[0] == 'search'],
+                         [('search', TITLE, legacy.ZONE)])
+        self.assertFalse([call for call in self.gateway.calls if call[0] == 'list'])
+
     def assert_ready_target(self, result, start=TARGET_START, end=TARGET_END, event_id=EVENT_ID):
         self.assertEqual((result.status, result.action), ('ready', 'reschedule'))
         self.assertEqual(result.data['parameters']['event_id'], event_id)
@@ -69,7 +74,13 @@ class SuccessiveRescheduleTests(unittest.TestCase):
         self.assertFalse(result.data['execution_allowed'])
 
     def pending_after_not_found(self):
-        result, memory = self.service.respond(MESSAGE, self.memory(selected=False))
+        # O evento só passa a existir depois da primeira busca global vazia.
+        events = self.gateway.events
+        self.install_events()
+        try:
+            result, memory = self.service.respond(MESSAGE, self.memory(selected=False))
+        finally:
+            self.install_events(*events)
         self.assertEqual(result.data['reason'], 'event_not_found')
         self.assertEqual(memory.pending_request.awaiting, ('event',))
         self.assertEqual(memory.pending_request.fields['start'], TARGET_START)
@@ -77,39 +88,39 @@ class SuccessiveRescheduleTests(unittest.TestCase):
         self.gateway.calls.clear()
         return memory
 
-    def test_second_reschedule_searches_current_event_day_and_keeps_requested_times(self):
+    def test_second_reschedule_searches_globally_and_keeps_requested_times(self):
         self.model.failure = legacy.ModelError('llm_unavailable')
         result, _ = self.service.respond(MESSAGE, self.memory())
         self.assert_ready_target(result)
-        self.assert_search_day('2026-10-26')
-        self.assertEqual([call[0] for call in self.gateway.calls], ['get', 'list', 'get'])
-        self.assertEqual(self.model.calls, [])
+        self.assert_global_search()
+        self.assertEqual([call[0] for call in self.gateway.calls], ['search', 'get'])
+        self.assertEqual(len(self.model.calls), 1)
 
     def test_destination_day_does_not_become_source_search_day(self):
         message = 'Reagende Entrevista Projeto para 28/10/2026, das 18h48 às 19h18.'
         result, _ = self.service.respond(message, self.memory())
         self.assert_ready_target(result, TARGET_START.replace('-26T', '-28T'),
                                  TARGET_END.replace('-26T', '-28T'))
-        self.assert_search_day('2026-10-26')
+        self.assert_global_search()
 
-    def test_model_produced_edit_uses_fresh_current_day_after_move(self):
+    def test_model_produced_edit_searches_globally_after_move(self):
         self.model.plan = legacy.plan(action='edit', search_title=TITLE, location='Sala B')
         result, memory = self.service.respond(
             'Quero atualizar o local de Entrevista Projeto para Sala B.', self.memory())
         self.assertEqual((result.status, result.action), ('ready', 'edit'))
         self.assertEqual(result.data['parameters']['event_id'], EVENT_ID)
         self.assertEqual(memory.pending_request.fields['location'], 'Sala B')
-        self.assert_search_day('2026-10-26')
-        self.assertEqual([call[0] for call in self.gateway.calls], ['get', 'list', 'get'])
+        self.assert_global_search()
+        self.assertEqual([call[0] for call in self.gateway.calls], ['search', 'get'])
         self.assertFalse(result.data['execution_allowed'])
 
-    def test_model_produced_reschedule_uses_fresh_current_day_after_move(self):
+    def test_model_produced_reschedule_searches_globally_after_move(self):
         self.model.plan = legacy.plan(action='reschedule', search_title=TITLE,
             start=TARGET_START, end=TARGET_END)
         result, _ = self.service.respond(
             'Pode remarcar Entrevista Projeto para 26/10/2026 das 18h48 às 19h18?', self.memory())
         self.assert_ready_target(result)
-        self.assert_search_day('2026-10-26')
+        self.assert_global_search()
 
     def test_current_day_duplicates_still_require_explicit_selection(self):
         first = self.gateway.events[0]
@@ -122,15 +133,15 @@ class SuccessiveRescheduleTests(unittest.TestCase):
         self.assertIsNone(result.data['parameters'])
         self.assertEqual(memory.pending_request.fields['start'], TARGET_START)
         self.assertEqual(memory.pending_request.fields['end'], TARGET_END)
-        self.assert_search_day('2026-10-26')
-        self.assertEqual([call[0] for call in self.gateway.calls], ['get', 'list'])
+        self.assert_global_search()
+        self.assertEqual([call[0] for call in self.gateway.calls], ['search'])
 
-    def test_failed_current_event_lookup_never_prepares_reschedule(self):
+    def test_failed_global_search_never_prepares_reschedule(self):
         self.gateway.failure = RuntimeError('fixture lookup failure')
         result, _ = self.service.respond(MESSAGE, self.memory())
         self.assertEqual((result.status, result.action), ('failed', 'reschedule'))
         self.assertIsNone(result.data)
-        self.assertEqual([call[0] for call in self.gateway.calls], ['get'])
+        self.assertEqual([call[0] for call in self.gateway.calls], ['search'])
 
     def test_explicit_source_date_overrides_remembered_moved_event_day(self):
         source = replace(self.gateway.events[0], event_id='ExplicitSourceFixture',
@@ -146,12 +157,13 @@ class SuccessiveRescheduleTests(unittest.TestCase):
         self.assert_search_day('2026-10-27')
         self.assertEqual([call[0] for call in self.gateway.calls], ['list', 'get'])
 
-    def test_unrelated_remembered_event_never_changes_source_search_day(self):
-        self.gateway.lookups[EVENT_ID] = replace(self.gateway.events[0], title='Outro compromisso')
-        result, memory = self.service.respond(MESSAGE, self.memory())
-        self.assertEqual(result.data['reason'], 'event_not_found')
-        self.assertIsNone(result.data['parameters'])
-        self.assert_search_day('2026-10-27')
+    def test_unrelated_remembered_event_never_restricts_global_search(self):
+        memory = replace(self.memory(), selected_event_id='UnrelatedFixture')
+        self.gateway.lookups['UnrelatedFixture'] = legacy.event('UnrelatedFixture', title='Outro compromisso')
+        result, memory = self.service.respond(MESSAGE, memory)
+        self.assert_ready_target(result)
+        self.assert_global_search()
+        self.assertEqual([call[0] for call in self.gateway.calls], ['search', 'get'])
         self.assertEqual(memory.pending_request.fields['start'], TARGET_START)
         self.assertEqual(memory.pending_request.fields['end'], TARGET_END)
 
@@ -184,12 +196,12 @@ class SuccessiveRescheduleTests(unittest.TestCase):
         result, _ = self.service.respond(message, memory)
         self.assert_ready_target(result, TARGET_START.replace('18:48', '18:50'),
                                  TARGET_END.replace('19:18', '19:20'))
-        self.assert_search_day('2026-10-26')
+        self.assert_global_search()
 
-    def test_monthly_context_keeps_cross_day_title_ambiguity_after_selected_event_lookup(self):
+    def test_monthly_context_never_hides_cross_day_title_ambiguity(self):
         first = self.gateway.events[0]
         self.install_events(first, replace(first, event_id='OtherDayRescheduleFixture',
-            start=OLD_START.replace('-26T', '-27T'), end=OLD_END.replace('-26T', '-27T')))
+            start=OLD_START.replace('2026-10-26', '2027-03-27'), end=OLD_END.replace('2026-10-26', '2027-03-27')))
         memory = replace(self.memory(),
             last_list={'date': '2026-10-26', 'period': 'month', 'time_zone': legacy.ZONE})
         result, updated = self.service.respond(MESSAGE, memory)
@@ -200,10 +212,7 @@ class SuccessiveRescheduleTests(unittest.TestCase):
         self.assertIsNone(result.data['parameters'])
         self.assertEqual(updated.pending_request.fields['start'], TARGET_START)
         self.assertEqual(updated.pending_request.fields['end'], TARGET_END)
-        periods = [call[1] for call in self.gateway.calls if call[0] == 'list']
-        self.assertEqual(len(periods), 1)
-        self.assertEqual((periods[0].start.date().isoformat(), periods[0].end.date().isoformat()),
-                         ('2026-10-01', '2026-11-01'))
+        self.assert_global_search()
 
     def test_pasted_event_title_with_change_word_does_not_replace_desired_times(self):
         memory = self.pending_after_not_found()

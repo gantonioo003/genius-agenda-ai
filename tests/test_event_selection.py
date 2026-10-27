@@ -151,7 +151,6 @@ class EventSelectionServiceTests(unittest.TestCase):
             {"title": "", "period": self.period},
             {"title": "  ", "period": self.period},
             {"title": "\u0301", "period": self.period},
-            {"title": "entrevista"},
             {"title": "entrevista", "period": self.period, "time_zone": "UTC"},
             {"event_id": "TargetID", "title": "entrevista"},
             {"event_id": "TargetID", "period": self.period},

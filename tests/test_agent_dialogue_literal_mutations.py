@@ -31,7 +31,8 @@ class LiteralMutationTests(unittest.TestCase):
         self.assertEqual(result.data['parameters']['start'], '2026-10-26T16:45:00-03:00')
         self.assertEqual(result.data['parameters']['end'], '2026-10-26T17:15:00-03:00')
         self.assertFalse(result.data['execution_allowed'])
-        self.assertEqual([call[0] for call in self.gateway.calls], ['get', 'list', 'get'])
+        self.assertEqual(self.gateway.calls, [('search', TITLE, legacy.ZONE), ('get', 'LiteralFake0', legacy.ZONE)])
+        self.assertEqual(len(self.model.calls), 1)
 
     def test_complete_reschedule_without_zone_survives_unavailable_model(self):
         from unittest.mock import patch
@@ -40,7 +41,7 @@ class LiteralMutationTests(unittest.TestCase):
         message = MESSAGE.replace(', no horário de Recife', '')
         with patch.object(self.model, 'plan_dialogue', side_effect=ModelError('llm_unavailable')) as model:
             result, _ = self.service.respond(message, memory)
-        model.assert_not_called()
+        model.assert_called_once()
         self.assertEqual((result.status, result.action), ('ready', 'reschedule'))
         self.assertEqual(result.data['parameters']['event_id'], 'LiteralFake0')
         self.assertEqual(result.data['parameters']['time_zone'], legacy.ZONE)
@@ -71,15 +72,15 @@ class LiteralMutationTests(unittest.TestCase):
         return replace(memory, last_list={'date': '2026-10-27', 'period': 'day', 'time_zone': legacy.ZONE},
                        selected_event_id='LiteralFake0')
 
-    def test_delete_after_move_uses_current_day_and_still_refetches_unique_match(self):
+    def test_delete_after_move_searches_globally_and_still_refetches_unique_match(self):
         memory = self.moved_memory()
         self.model.failure = legacy.ModelError('llm_invalid_response')
         result, _ = self.service.respond('Exclua ' + TITLE + '.', memory)
         self.assertEqual((result.status, result.action), ('ready', 'delete'))
         self.assertEqual(result.data['parameters']['event_id'], 'LiteralFake0')
         self.assertFalse(result.data['execution_allowed'])
-        self.assertEqual([call[0] for call in self.gateway.calls], ['get', 'list', 'get'])
-        self.assertEqual(self.gateway.calls[1][1].start.date().isoformat(), '2026-10-26')
+        self.assertEqual(self.gateway.calls, [('search', TITLE, legacy.ZONE), ('get', 'LiteralFake0', legacy.ZONE)])
+        self.assertEqual(len(self.model.calls), 1)
 
     def test_delete_after_move_does_not_break_same_day_duplicate_tie(self):
         memory = self.moved_memory(2)
@@ -96,13 +97,15 @@ class LiteralMutationTests(unittest.TestCase):
         self.assertEqual(self.gateway.calls[0][1].start.date().isoformat(), '2026-10-27')
         self.assertFalse(result.data['execution_allowed'])
 
-    def test_unrelated_selection_never_changes_delete_search_day(self):
+    def test_unrelated_selection_never_restricts_global_delete_search(self):
         from dataclasses import replace
         memory = self.moved_memory()
-        self.gateway.lookups['LiteralFake0'] = replace(self.gateway.lookups['LiteralFake0'], title='Outro compromisso')
+        memory = replace(memory, selected_event_id='UnrelatedSelection')
+        self.gateway.lookups['UnrelatedSelection'] = legacy.event('UnrelatedSelection', title='Outro compromisso')
         result, _ = self.service.respond('Exclua ' + TITLE, memory)
-        self.assertEqual(self.gateway.calls[1][1].start.date().isoformat(), '2026-10-27')
-        self.assertNotEqual(result.status, 'ready')
+        self.assertEqual(self.gateway.calls, [('search', TITLE, legacy.ZONE), ('get', 'LiteralFake0', legacy.ZONE)])
+        self.assertEqual(result.status, 'ready')
+        self.assertEqual(result.data['parameters']['event_id'], 'LiteralFake0')
 
     def test_failed_fresh_lookup_never_prepares_delete(self):
         memory = self.moved_memory()
