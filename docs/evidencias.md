@@ -4,7 +4,7 @@ As capturas e saídas reais de terminal ficam em `data/evidencias/`, com índice
 
 A cada marco visual relevante, salvar a captura numerada e registrar data, origem, etapa e resultado. Prints enviados durante o desenvolvimento também integram o acervo quando acrescentam uma evidência útil. Os rótulos distinguem preparação, confirmação pela API e resultado na interface.
 
-**Acervo atual em 26/10/2026: 151 registros, sendo 32 imagens e 119 JSON.** Os totais citados nas descrições anteriores são históricos. A etapa 12 está [encerrada no escopo de teste](fechamento-etapa-12.md).
+**Acervo atual em 30/10/2026: 215 registros, sendo 63 imagens e 152 JSON.** Os totais citados nas descrições anteriores são históricos. A etapa 12 está [encerrada no escopo de teste](fechamento-etapa-12.md).
 
 ## Registros
 
@@ -497,3 +497,92 @@ Captura privada 174 do relato original e relatório 175 da suíte atual. [Result
 ## Operações por nome e linguagem natural
 
 Registros privados 176/177: suíte completa atual, Gemini real com frases fictícias e busca Google somente de leitura. [Comportamento e limites de medição](operacoes-por-nome.md). Acervo atualizado: 177 registros, 45 imagens e 132 JSON.
+
+## 178–183 — Painel web: prévia visual
+
+- Data: 27/10/2026. Fases 1 e 2 da etapa 15 concluídas como definição e protótipo local.
+- 178–181: capturas reais das quatro telas com dados fictícios: Visão geral, Agenda, Preparo e Lembretes.
+- 182: visão geral no viewport mobile de 390 × 844. As quatro telas também foram conferidas a 320 px, incluindo a ausência de rolagem lateral.
+- 183: 27 verificações de interface, 12 verificações de dados/fontes e 8 respostas HTTP locais, sem falhas; conjuntos separados, não somados à suíte Python do backend.
+- Navegação, CRUD fictício com confirmação/conflito, checklist por evento, estados de tela e histórico ilustrativo conferidos. Console sem erros/avisos capturados. Movimento reduzido previsto em CSS/JS; não houve alteração da preferência do sistema.
+- Nenhuma chamada ao provedor, escrita Google ou mensagem WhatsApp. Integração real e modo demonstração integrado continuam pendentes.
+- Acervo atualizado: 183 registros, 50 imagens e 133 JSON. Próximo registro: 184.
+
+[Prévia visual e limites](painel-web-visual.md). As imagens públicas desta fase mostram somente exemplos fictícios.
+
+## 184–187 — Painel conectado à API
+
+- Data: 27/10/2026. Fase 3 da etapa 15 concluída: consultas reais protegidas, em localhost.
+- 184: suíte completa de **2.605 testes Python** e **17 testes Node do frontend**, sem falhas. Conjuntos separados; hashes de fontes e logs preservados. Uma rodada interrompida teve falha de temporização de processo; reexecução isolada e suíte final passaram.
+- 185: captura real da entrada protegida, sem códigos ou dados da agenda; esta imagem também pode ser pública.
+- 186: captura real da agenda autenticada no celular, conservada somente no acervo local por conter dados de eventos.
+- 187: validação HTTP e navegador: sessão e revogação, cookie HttpOnly/Strict, CSRF, respostas sem cache, agenda e detalhes, lembretes e histórico. Banco de lembretes permaneceu com o mesmo SHA-256. Relatório conserva contagens e resultados, sem IDs, telefones, cookies, chaves ou respostas privadas.
+- Nenhuma escrita no Google, envio WhatsApp ou chamada Gemini nos probes. O OAuth pode atualizar metadados locais durante a leitura. O formato histórico do aviso é previsto, não comprovação de mídia enviada.
+- Pareamento local por CLI; sessão de um proprietário e uma agenda. Demonstração fictícia isolada em `/painel/demo/`. CRUD real pelo painel continua na fase 4; WhatsApp segue operacional.
+- Acervo atualizado: 187 registros, 52 imagens e 135 JSON. Próximo registro: 188.
+
+[Como acessar e limites](painel-web-api.md).
+
+## 188–192 — Agenda com confirmação pelo painel
+
+- Data: 28/10/2026. Fase 4 da etapa 15 concluída: consultar por dia, semana e mês; criar, editar, reagendar e excluir com prévia e confirmação do evento selecionado.
+- 188: suíte completa de **2.665 testes Python** e **39 testes Node** aprovados, sem falhas ou skips; hashes das fontes e logs preservados, conjuntos separados.
+- 189: ensaio no navegador com aplicação e stores reais e calendário controlado: criação, edição, prévia cancelada, reagendamento, exclusão e remoção da lista; consultas semana/mês e uso mobile. Console sem erros/avisos capturados.
+- 190: captura real da prévia de reagendamento no computador; 191: confirmação de exclusão no celular. Ambos usam dados fictícios do calendário controlado e podem ser públicos. Não são comprovação de nova gravação no Google.
+- 192: API instalada leu o Google real, preparou uma criação fictícia e cancelou a proposta sem executar. O dia consultado e os SHA-256 dos ledgers de execução/lembretes permaneceram iguais. Confirmação sem CSRF foi bloqueada. Relatório sem IDs reais, chaves, cookies ou respostas privadas.
+- A API foi recarregada com fila ociosa e worker WhatsApp habilitado. Formulário real de criação habilitado e nome acessível no celular conferidos. Nenhuma nova escrita Google, mensagem WhatsApp ou chamada Gemini neste ensaio real.
+- Propostas vinculadas à sessão, aos parâmetros e à versão; repetições, concorrência, expiração, conflitos e resultado incerto cobertos. O painel continua local e de um proprietário.
+- Acervo atualizado: 192 registros, 54 imagens e 138 JSON. Próximo registro: 193.
+
+[Uso, confirmação e limites](painel-web-agenda.md).
+
+## 193–197 — Resumos e preparo pelo painel
+
+- Data: 28/10/2026. Fase 5 da etapa 15 concluída: abas Entrevista, Resumo e Horários livres. Resumos semana/mês usam IA; disponibilidade é cálculo da agenda; briefing/checklist são factuais e genéricos.
+- 193: suíte completa de **2.684 testes Python** e **61 testes Node** aprovados, sem falhas/skips na versão final; hashes de fontes e logs preservados. Uma primeira rodada falhou em temporização de um teste HTTP de lembretes existente; teste isolado e suíte consolidada passaram, sem alterar o código de lembretes.
+- 194: captura real do resumo com dados fictícios e modelo controlado; 195: opções de horário no celular, sem reserva. Podem ser públicas; não representam dados pessoais ou uma nova operação no Google.
+- 196: ensaio do navegador com aplicação/stores reais e calendário/modelo controlados: briefing com notas, checklist marcado, resumo IA, alternativa factual, período vazio sem chamada de IA, falha de coleta, datas legíveis e ausência de rolagem horizontal. O modelo controlado não recebeu marcadores privados.
+- 197: autorização Google renovada pelo proprietário. API instalada consultou a agenda real: resumo de quatro compromissos com modo ai_organized, três opções livres e briefing factual com seis itens. Calendário antes/depois e hashes dos ledgers de execução/lembretes permaneceram iguais; nenhuma reserva, escrita Google ou mensagem WhatsApp. Relatório sem IDs, títulos reais, chaves, cookies, notas ou respostas privadas.
+- Geração explícita; trocar telas ou atualizar agenda não chama IA automaticamente. Mudanças no evento/contexto invalidam resultados antigos. Marcações do checklist ficam somente na sessão. API local e worker WhatsApp preservados.
+- Acervo atualizado: 197 registros, 56 imagens e 141 JSON. Próximo registro: 198.
+
+[Uso e limites do preparo](painel-web-preparo.md).
+
+## 198–203 — Lembretes e cards no painel
+
+- Data: 28/10/2026. Fase 6 da etapa 15 concluída: Pendentes, Envios aceitos, Atenção e Todo o histórico; contagens do filtro, motivos e histórico cronológico.
+- 198: **221 testes Python focados no painel/cards** e **84 testes Node** aprovados, com hashes de fontes e logs. A última suíte Python completa continua sendo a histórica de 2.684 testes; não foi somada nem repetida neste marco.
+- 199: lista de estados no desktop; 200: card reconstruído identificado como prévia não enviada; 201: prévia e histórico no celular. Capturas usam somente dados fictícios do calendário controlado e podem ser públicas.
+- 202: navegador verificou filtros (2 pendentes, 1 aceito, 3 em atenção, 7 no total), histórico com quatro transições, PNG privado 1254×1254, aviso de evento alterado, mensagem somente em texto e limpeza ao sair. Ensaio HTTP controlado confirmou 401 sem sessão, 200 PNG, 404 removido, 409 alterado, 502 calendário indisponível e 422 para aviso de texto, com ledger byte a byte igual.
+- 203: API instalada leu 20 registros reais (7 aceitos, 9 cancelados e 4 expirados), consultou o histórico e gerou uma prévia privada usando dados atuais do Google. PNG válido 1254×1254; seus bytes privados não foram salvos. SHA-256 do ledger de lembretes igual antes/depois, nenhuma escrita Google, envio WhatsApp, chamada de modelo ou publicação de mídia.
+- Aceite do provedor não comprova entrega/leitura. O formato é previsto pela configuração atual e a prévia não recupera a imagem histórica enviada. Eventos alterados/removidos conservam o histórico, mas não geram uma prévia desatualizada.
+- A API foi recarregada com a fila ociosa e o worker WhatsApp preservado. A tela não chama tick, dispatch, recover ou reenvio.
+- Acervo atualizado: 203 registros, 59 imagens e 144 JSON. Próximo registro: 204.
+
+[Uso e limites dos lembretes](painel-web-lembretes.md).
+
+## 204–208 — Modo demonstração isolado
+
+- Data: 28/10/2026. Fase 7 da etapa 15 concluída. Cenário fixo de 27/10/2026, às 12h, com identificação permanente de dados fictícios, atalhos para explorar e restauração completa dos exemplos.
+- 204: **227 testes Python focados em painel/cards/demonstração e 105 testes Node aprovados**. O conjunto Node inclui 21 testes da demo e 84 de regressão da interface conectada. Os 12 testes da fronteira de arquivos/sessão integram o conjunto Python. A suíte completa histórica de 2.684 testes não foi repetida nem somada a esses números.
+- 205: captura desktop da demonstração restaurada; 206: confirmação de exclusão fictícia no celular. As imagens não contêm dados da agenda real, credenciais ou códigos de pareamento.
+- 207: navegador verificou criação, edição, dois reagendamentos, cancelamento e confirmação de exclusão, conflito, seis snapshots de avisos cancelados, checklist, resumo sem IA, horários sem reserva, estados de falha/vazio/carregamento, reset e abas independentes. Larguras 390 e 320 sem rolagem horizontal. Console sem erros ou avisos capturados.
+- 208: 15 verificações HTTP na API instalada confirmaram arquivos da demo, CSP com conexões bloqueadas, ausência de criação/revogação de sessão, bloqueio de arquivos privados/live na rota demo e autenticação preservada nas consultas reais. SHA-256 do ledger de lembretes igual antes/depois.
+- A aplicação e o servidor estático independente foram recarregados. A demo não chama Google, Gemini, n8n, SQLite ou WhatsApp; os contadores controlados de factories permaneceram zerados. O servidor independente serve somente sua allowlist de arquivos fictícios. Nenhuma mensagem ou escrita Google foi realizada neste marco.
+- Acervo atualizado: 208 registros, 61 imagens e 147 JSON. Próximo registro: 209.
+
+[Como explorar a demonstração](painel-web-demonstracao.md).
+
+## 209–215 — Fechamento do painel e apresentação
+
+- Data: 30/10/2026. Fase 8 da etapa 15 concluída no escopo local e de um proprietário.
+- 209: suíte completa com **2.707 testes Python e 105 testes Node aprovados**, sem falhas, erros ou testes ignorados. Revisões de código de sessão, CSRF, confirmações, conflitos, resultados incertos e isolamento da demonstração sem bloqueios encontrados. Os totais anteriores são históricos, não somados.
+- 210: visão geral final no desktop; 211: formulário no celular com aviso antes de descartar alterações. Capturas com dados fictícios, sem credenciais ou códigos de autenticação.
+- 212: revisão por teclado do link para conteúdo, foco inicial e retorno após fechar diálogo, `Esc`, preservação do formulário e aviso de descarte. Larguras 390/320 sem rolagem horizontal; console sem erros/avisos capturados. Contraste do selo corrigido; movimento reduzido revisado em código. Não equivale a certificação WCAG ou ensaio completo com leitores de tela.
+- 213: API instalada consultou o Google, preparou/cancelou um rascunho e leu 20 avisos reais/histórico. Prévia privada PNG 1254×1254 validada sem salvar seus bytes. Agenda e ledgers de execução/lembretes iguais antes/depois; nenhum envio, escrita Google ou chamada de modelo. Quinze verificações HTTP confirmaram o isolamento da demo.
+- 214: tour visual editado de 42 segundos, sem narração, com seis capturas reais da demonstração fictícia. MP4 H.264 decodificado integralmente e três quadros conferidos; GIF de prévia acelerado. Não é gravação em tempo real nem prova de latência, operação Google ou entrega WhatsApp. O vídeo histórico do recrutador permanece separado.
+- 215: auditoria dos arquivos preparados para publicação, links locais e ausência de segredos privados no conteúdo do commit. `.env`, credenciais, bancos e evidências pessoais permanecem fora do Git.
+- README, guias, roteiro, texto para currículo e sugestão para LinkedIn atualizados. Nenhuma publicação em rede social foi realizada.
+- Acervo atualizado: 215 registros, 63 imagens e 152 JSON. Próximo registro: 216.
+
+[Fechamento e limites](fechamento-painel-web.md) · [Materiais de apresentação](apresentacao-painel.md).

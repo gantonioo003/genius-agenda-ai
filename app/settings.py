@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     log_level: Literal["debug", "info", "warning", "error", "critical"] = "info"
     database_path: Path = Path("data/agenda.db")
     reminder_database_path: Path = Path("data/reminders.sqlite3")
+    panel_enabled: bool = True
+    panel_database_path: Path = Path("data/panel-access.sqlite3")
+    panel_operations_database_path: Path = Path("data/panel-operations.sqlite3")
     reminder_cards_enabled: bool = False
     whatsapp_agent_enabled: bool = False
     whatsapp_agent_database_path: Path = Path("data/whatsapp-agent.sqlite3")

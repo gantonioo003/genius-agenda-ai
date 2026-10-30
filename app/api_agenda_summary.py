@@ -75,7 +75,9 @@ async def _body(request):
     return body['period'], body.get('date')
 
 
-def register_agenda_summary_routes(router):
+def register_agenda_summary_routes(router, *, presentation="detailed"):
+    if presentation not in {"detailed", "whatsapp"}:
+        raise ValueError("Apresentação do resumo inválida.")
     @router.post('/agenda/summary', name='api_v1_agenda_summary', tags=['preparation'],
         summary='Organizar a agenda de semana/mês em resumo fundamentado',
         description=('Coleta atual da agenda autorizada e uma tentativa de organização por IA. '
@@ -106,7 +108,7 @@ def register_agenda_summary_routes(router):
             if factory is None:
                 factory = lambda: configured_language_model(state.settings)
             return AgendaSummaryService(context_service, factory,
-                max_input_chars=state.settings.llm_max_input_chars).summarize(period=period, reference_date=reference_date)
+                max_input_chars=state.settings.llm_max_input_chars, presentation=presentation).summarize(period=period, reference_date=reference_date)
 
         try:
             result = await run_in_threadpool(execute)

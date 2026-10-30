@@ -3,7 +3,7 @@
 from contextlib import asynccontextmanager
 from starlette.concurrency import run_in_threadpool
 
-from fastapi import FastAPI, Request
+from fastapi import APIRouter, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -33,12 +33,18 @@ from app.api_security import (
     ApiSecurityError, RequestCorrelationMiddleware, api_security_error_handler,
     create_api_router, security_envelope,
 )
+from app.api_panel import register_panel_read_routes
+from app.api_panel_agenda import register_panel_agenda_routes
+from app.api_panel_cards import register_panel_card_routes
+from app.api_panel_preparation import register_panel_preparation_routes
+from app.panel_security import PanelAccessError, panel_access_error_handler, register_panel_auth_routes
+from app.panel_web import PanelHeadersMiddleware, register_panel_web_routes
 from app.database import Database, database
 from app.settings import Settings, settings
 
 
 def create_app(config: Settings | None = None, db: Database | None = None, *,
-               calendar_gateway_factory=None, sandbox_reply_service_factory=None, agent_preview_service_factory=None, agent_query_service_factory=None, conversation_store_factory=None, agent_dialogue_service_factory=None, confirmation_service_factory=None, agent_creation_store_factory=None, agent_creation_service_factory=None, agent_update_store_factory=None, agent_update_service_factory=None, agent_deletion_store_factory=None, agent_deletion_service_factory=None, whatsapp_agent_store_factory=None, whatsapp_agent_worker_factory=None, whatsapp_agent_service_factory=None, reminder_store_factory=None, reminder_gateway_factory=None, reminder_recipient_binding_loader=None, reminder_delivery_recipient_loader=None, reminder_delivery_sender_factory=None, summary_calendar_gateway_factory=None, summary_model_factory=None, availability_gateway_factory=None, briefing_gateway_factory=None) -> FastAPI:
+               calendar_gateway_factory=None, sandbox_reply_service_factory=None, agent_preview_service_factory=None, agent_query_service_factory=None, conversation_store_factory=None, agent_dialogue_service_factory=None, confirmation_service_factory=None, agent_creation_store_factory=None, agent_creation_service_factory=None, agent_update_store_factory=None, agent_update_service_factory=None, agent_deletion_store_factory=None, agent_deletion_service_factory=None, whatsapp_agent_store_factory=None, whatsapp_agent_worker_factory=None, whatsapp_agent_service_factory=None, reminder_store_factory=None, reminder_gateway_factory=None, reminder_recipient_binding_loader=None, reminder_delivery_recipient_loader=None, reminder_delivery_sender_factory=None, summary_calendar_gateway_factory=None, summary_model_factory=None, availability_gateway_factory=None, briefing_gateway_factory=None, panel_access_store_factory=None, panel_calendar_gateway_factory=None, panel_agenda_service_factory=None) -> FastAPI:
     config = settings if config is None else config
     selected_db = database if db is None else db
 
@@ -70,6 +76,9 @@ def create_app(config: Settings | None = None, db: Database | None = None, *,
         description="Assistente de agenda para entrevistas de emprego.",
         lifespan=lifespan,
     )
+    application.state.panel_agenda_service_factory = panel_agenda_service_factory
+    application.state.panel_access_store_factory = panel_access_store_factory
+    application.state.panel_calendar_gateway_factory = panel_calendar_gateway_factory
     application.state.settings = config
     application.state.database = selected_db
     application.state.sandbox_reply_service_factory = sandbox_reply_service_factory
@@ -99,7 +108,9 @@ def create_app(config: Settings | None = None, db: Database | None = None, *,
     application.state.calendar_gateway_factory = (
         default_calendar_gateway if calendar_gateway_factory is None else calendar_gateway_factory
     )
+    application.add_middleware(PanelHeadersMiddleware)
     application.add_middleware(RequestCorrelationMiddleware)
+    application.add_exception_handler(PanelAccessError, panel_access_error_handler)
     application.add_exception_handler(ApiSecurityError, api_security_error_handler)
     application.add_exception_handler(RequestValidationError, query_validation_error_handler)
     application.add_exception_handler(StarletteHTTPException, creation_http_error_handler)
@@ -143,6 +154,14 @@ def create_app(config: Settings | None = None, db: Database | None = None, *,
     register_availability_routes(router)
     register_briefing_routes(router)
     application.include_router(router)
+    panel_router = APIRouter(prefix="/painel/api")
+    register_panel_auth_routes(panel_router)
+    register_panel_read_routes(panel_router)
+    register_panel_agenda_routes(panel_router)
+    register_panel_card_routes(panel_router)
+    application.include_router(panel_router)
+    register_panel_preparation_routes(application)
+    register_panel_web_routes(application)
     return application
 
 

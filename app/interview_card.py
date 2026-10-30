@@ -124,13 +124,16 @@ def _title_lines(draw, value, font, width, max_characters, max_lines):
 
 def render_interview_card(event_title, start: datetime, end: datetime, display_timezone: str,
                           output_path: Path, now: datetime | None = None, *, demonstration=False,
-                          template_path: Path | None = None) -> Path:
+                          template_path: Path | None = None, preview=False) -> Path:
     """Retornar PNG RGB 1254²; texto crítico nunca é cortado para caber."""
     try:
-        if type(demonstration) is not bool:
+        if type(demonstration) is not bool or type(preview) is not bool or preview and demonstration:
             raise ValueError()
         labels, ambiguous = _labels(event_title, start, end, display_timezone,
                                     datetime.now(timezone.utc) if now is None else now)
+        if preview:
+            labels['headline'] = 'Prévia do compromisso'
+            labels['footer'] = 'Prévia • não enviada'
         template_path = ASSET_DIR / 'interview-template-v1.json' if template_path is None else Path(template_path)
         template = json.loads(template_path.read_text(encoding='utf-8'))
         if (template.get('schema_version') != 1 or template['canvas'] != {

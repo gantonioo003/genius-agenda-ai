@@ -1,0 +1,55 @@
+/* Demonstration-only presentation. The connected panel never loads this file. */
+.topbar { position: sticky; top: 0; z-index: 20; background: rgb(11 14 17 / 95%); backdrop-filter: blur(16px); }
+.demo-badge { font-size: 12px; line-height: 1.35; padding: 7px 11px; border-radius: 10px; gap: 8px; color: #d1c8f5; background: #211b2d; }
+.demo-badge::before { display: none; }
+.demo-badge > span:last-child { display: grid; text-align: left; }
+.demo-badge small { font-size: 10px; font-weight: 400; color: #bcb1d4; }
+.demo-reference { max-width: 1280px; margin: 0 auto; padding: 0 40px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 5px 18px; color: var(--quiet); font-size: 11px; }
+.demo-reference strong { color: var(--muted); font-weight: 500; }
+.demo-dialog-label { display: block; color: #c4b9df; font-size: 10px; margin-top: 7px; letter-spacing: .02em; }
+.demo-guide { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 21px 23px; border: 1px solid #35303f; border-radius: var(--radius); background: linear-gradient(110deg, #18151f, #11151a); margin: 0 0 25px; }
+.demo-guide h2 { font-size: 17px; font-weight: 550; letter-spacing: -.35px; margin: 6px 0; }
+.demo-guide p { color: var(--muted); font-size: 12px; line-height: 1.7; max-width: 330px; }
+.demo-guide-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.demo-guide-actions .button { min-height: 42px; padding: 10px 13px; font-size: 11px; }
+.demo-guide-actions .icon { width: 17px; height: 17px; }
+.demo-filter-count { color: var(--muted); font-size: 12px; margin: 20px 0 12px; }
+.demo-timeline { list-style: none; padding: 0 0 0 18px; margin: 20px 0; border-left: 1px solid #3a324c; }
+.demo-timeline li { position: relative; padding: 0 0 24px 9px; }
+.demo-timeline li:last-child { padding-bottom: 0; }
+.demo-timeline li::before { content: ''; position: absolute; top: 7px; left: -22px; width: 7px; height: 7px; border-radius: 50%; background: var(--violet); }
+.demo-timeline li p { margin: 8px 0 4px; font-size: 12px; line-height: 1.7; }
+.demo-timeline time { color: var(--quiet); font-size: 11px; }
+.demo-reminder-preview { margin-top: 24px; }
+.demo-reminder-preview > h3 { font-size: 12px; font-weight: 500; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.demo-reminder-preview .card-preview { margin-top: 13px; }
+.demo-reminder-preview .card-preview-copy > span:last-child { font-size: 10px; line-height: 1.5; }
+.text-message-preview small { display: block; color: #b6b3be; font-size: 11px; margin-top: 12px; }
+.info-dialog > .tag { max-width: calc(100% - 20px); white-space: normal; }
+.reminder-filters { flex-wrap: wrap; }
+
+@media (max-width: 1100px) {
+  .demo-guide { display: block; }
+  .demo-guide p { max-width: 100%; }
+  .demo-guide-actions { justify-content: flex-start; margin-top: 15px; }
+}
+@media (max-width: 900px) { .demo-reference { padding-inline: 28px; } }
+@media (max-width: 700px) {
+  .topbar { gap: 9px; padding: 13px 16px; }
+  .topbar-right { gap: 7px; }
+  .mobile-wordmark { font-size: 22px; }
+  .demo-badge { font-size: 11px; padding: 5px 8px; }
+  .demo-badge small { font-size: 9px; }
+  .demo-reference { padding: 13px 20px 0; display: grid; gap: 4px; font-size: 11px; }
+  .demo-guide { padding: 17px; margin-bottom: 21px; border-radius: 15px; }
+  .demo-guide h2 { font-size: 16px; }
+  .demo-guide p { font-size: 12px; }
+  .demo-guide-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+  .demo-guide-actions .button { min-width: 0; min-height: 45px; padding: 8px 6px; font-size: 12px; }
+  .demo-dialog-label { font-size: 10px; line-height: 1.5; }
+  .reminder-filters.segmented { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px; }
+  .reminder-filters.segmented button { font-size: 12px; min-height: 39px; }
+  .demo-reminder-preview .card-preview-copy > span:last-child { font-size: 10px; }
+  .demo-timeline li p { font-size: 13px; }
+}
+@media (prefers-reduced-motion: reduce) { .demo-guide, .topbar { backdrop-filter: none; } }

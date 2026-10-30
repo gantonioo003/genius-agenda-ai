@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b0e11">
+  <meta name="description" content="Explore o Genius Agenda AI com dados fictícios: agenda, preparo e lembretes. Nenhuma conexão com sua agenda real.">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'self'; form-action 'none'">
+  <title>Demonstração · Genius Agenda AI</title>
+  <link rel="icon" type="image/svg+xml" href="assets/mark.svg">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="demo.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Pular para o conteúdo</a>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Navegação principal">
+      <a class="brand" href="#visao-geral" aria-label="Genius, visão geral">
+        <img class="brand-mark" src="assets/mark.svg" alt="" width="32" height="32">
+        <span><span class="brand-name">genius<span class="brand-point">.</span></span><span class="brand-sub">AGENDA AI</span></span>
+      </a>
+      <nav class="nav-list" id="navigation" aria-label="Telas do painel"></nav>
+      <div class="sidebar-bottom">
+        <button class="nav-item" data-action="info" aria-label="Sobre a demonstração"><span data-icon="sparkles"></span><span class="nav-label">Sobre a demonstração</span></button>
+        <div class="divider"></div>
+        <div class="profile"><span class="profile-avatar">G</span><div class="profile-copy"><strong>Seu espaço</strong><span>Ambiente demonstrativo</span></div></div>
+      </div>
+    </aside>
+    <div class="main-shell">
+      <header class="topbar">
+        <div class="topbar-left"><span class="mobile-only mobile-wordmark">genius<span>.</span></span><span class="breadcrumb" id="breadcrumb">Visão geral</span></div>
+        <div class="topbar-right">
+          <button class="demo-badge" data-action="info" aria-label="Demonstração • dados fictícios"><span class="status-dot"></span><span>Demonstração<small>Dados fictícios</small></span></button>
+          <button class="icon-button" data-action="reset-demo" aria-label="Restaurar demonstração" title="Restaurar exemplos"><span data-icon="refresh"></span></button>
+          <button class="icon-button" data-action="notifications" aria-label="Ver lembretes"><span data-icon="bell"></span><span class="notification-dot" aria-hidden="true"></span></button>
+          <span class="avatar desktop-only" aria-label="Perfil demonstrativo">G</span>
+        </div>
+      </header>
+      <div class="demo-reference" role="note"><span>Cenário: <strong>27/10/2026, às 12h</strong></span><span>Explore à vontade. Nada é enviado.</span></div>
+      <main id="main-content" class="page" tabindex="-1"></main>
+      <footer class="bottom-note">Demonstração com dados fictícios · Alterações só nesta aba · Nada é enviado.</footer>
+    </div>
+  </div>
+  <dialog id="sheet" class="sheet-dialog" aria-labelledby="sheet-title">
+    <div class="sheet-header"><div><span id="sheet-kicker" class="eyebrow">COMPROMISSO</span><span class="demo-dialog-label">Demonstração • dados fictícios</span></div><button class="icon-button dialog-close" data-action="close-sheet" aria-label="Fechar detalhes"><span data-icon="x"></span></button></div>
+    <div id="sheet-content" class="sheet-body"></div>
+    <div id="sheet-footer" class="sheet-footer"></div>
+  </dialog>
+  <dialog id="info" class="info-dialog" aria-labelledby="info-title">
+    <button class="icon-button dialog-close" data-action="close-info" aria-label="Fechar informações"><span data-icon="x"></span></button>
+    <span class="tag violet">DEMONSTRAÇÃO • DADOS FICTÍCIOS</span><h2 id="info-title">Um espaço para experimentar.</h2>
+    <p>As quatro telas usam compromissos fictícios. Você pode navegar, marcar o checklist e simular alterações com confirmação.</p>
+    <p>Este cenário representa 27/10/2026, às 12h. Você pode criar, editar, reagendar e excluir os exemplos, preparar entrevistas e conferir os avisos.</p>
+    <p>Não há conexão com Google, Gemini, WhatsApp ou a agenda real. As mudanças ficam só nesta aba e desaparecem ao restaurar os exemplos ou recarregar.</p>
+    <label class="field preview-tools">Experimentar estados da interface<select class="select" id="preview-scenario"><option value="normal">Conteúdo de exemplo</option><option value="loading">Carregando</option><option value="empty">Sem resultados</option><option value="error">Falha de atualização</option></select></label>
+    <div class="info-actions"><button class="button secondary" data-action="reset-demo">Restaurar exemplos</button><button class="button primary" data-action="close-info">Explorar o painel</button></div>
+  </dialog>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <noscript><div class="noscript-note">Ative o JavaScript para navegar pelo protótipo. Nenhuma conexão com a agenda real é feita.</div></noscript>
+</body>
+</html>

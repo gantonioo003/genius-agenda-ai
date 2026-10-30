@@ -1,6 +1,6 @@
 # Genius Agenda AI
 
-Assistente pelo WhatsApp para organizar entrevistas no Google Calendar, com contexto de conversa, confirmações, lembretes e preparo. Projeto desenvolvido para o Desafio Genius Agenda AI.
+Assistente pelo WhatsApp e por um painel web para organizar entrevistas no Google Calendar, com contexto de conversa, confirmações, lembretes e preparo. Projeto desenvolvido para o Desafio Genius Agenda AI.
 
 ## O que funciona
 
@@ -42,20 +42,33 @@ Configure a chave da API, OAuth Google, Gemini, destinatário autorizado e callb
 - [Resumos e preparo](docs/fechamento-etapa-13.md)
 - [Cards: reprodução e limites](docs/cards-com-ia.md)
 
+## Painel web
+
+Visão geral, Agenda, Preparo e Lembretes em uma interface responsiva. **Agenda, detalhes e histórico dos lembretes consultam dados reais; o CRUD pelo painel exige prévia e confirmação**, com sessão local protegida e chaves somente no servidor. [Acesso e segurança](docs/painel-web-api.md) · [Telas e funcionamento](docs/painel-web.md).
+
+Com a API ligada, abra <http://127.0.0.1:8000/painel/> e autorize o navegador pelo comando exibido. O **modo demonstração** fica em <http://127.0.0.1:8000/painel/demo/>, sem login: simule operações, preparo e avisos com dados fictícios; restaure os exemplos a qualquer momento. Também funciona sozinho na porta 8015 com `scripts/preview_panel.py`. [Explorar sem acessar a agenda real](docs/painel-web-demonstracao.md).
+
+![Visão geral do painel com dados fictícios](docs/assets/painel-visao-geral.png)
+
+[Tour visual do painel](docs/assets/painel-tour.mp4) · [Roteiro, currículo e LinkedIn](docs/apresentacao-painel.md). O tour é um clipe editado, sem narração, com cenas reais da demonstração fictícia; não mede o tempo de resposta das integrações.
+
+Criar, editar, reagendar e excluir já funcionam pelo painel, com confirmação, controle de versão, conflitos e proteção contra repetições. WhatsApp e painel usam a mesma agenda. [Como usar e o que foi testado](docs/painel-web-agenda.md). A tela **Preparo** já oferece resumo semanal/mensal organizado com IA, horários livres, briefing e checklist. [Como usar e limites](docs/painel-web-preparo.md). **Lembretes** mostra pendentes, envios aceitos e problemas, com histórico e prévia privada dos cards. [Acompanhar os avisos](docs/painel-web-lembretes.md).
+
 ## Testes e evidências
 
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -s tests
+node --test tests/panel_frontend.test.mjs tests/panel_demo.test.mjs
 ```
 
-Última suíte Python completa: **2.530 testes aprovados**. **981 verificações JavaScript históricas**; os conjuntos não são somados. [Operações por nome, Gemini e validação](docs/operacoes-por-nome.md).
+Fechamento do painel: **2.707 testes Python e 105 testes Node aprovados**, sem falhas ou testes ignorados (21 da demo e 84 do painel conectado). A revisão incluiu teclado, foco, diálogos, contraste e movimento reduzido, com verificações manuais e de código; não representa certificação de acessibilidade. [Validação e limites](docs/fechamento-painel-web.md). As **981 verificações JavaScript históricas** são um conjunto separado; os totais não são somados. [Operações por nome, Gemini e validação](docs/operacoes-por-nome.md).
 
-O acervo local conserva **177 registros: 45 imagens e 132 JSON**. Capturas originais, testes automatizados, aceites do provedor e recebimento humano são provas distintas. [Índice público dos resultados](docs/evidencias.md) · [Ensaio real](docs/ensaio-real-whatsapp.md).
+O acervo local conserva capturas e relatórios numerados de cada marco. Capturas originais, testes automatizados, aceites do provedor e recebimento humano são provas distintas. [Índice público dos resultados](docs/evidencias.md) · [Ensaio real](docs/ensaio-real-whatsapp.md).
 
 ## Limitações
 
-Ambiente de teste local, com um destinatário no sandbox. Serviços e computador precisam permanecer ligados; túneis de teste são temporários. Fora da janela do canal, faltam templates contextuais de produção. A interpretação pode pedir esclarecimentos; dados ambíguos e estados incertos não autorizam repetição automática. O painel web ficou adiado para priorizar validação e vídeo.
+Ambiente de teste local, com um destinatário no sandbox. Serviços e computador precisam permanecer ligados; túneis de teste são temporários. Fora da janela do canal, faltam templates contextuais de produção. A interpretação pode pedir esclarecimentos; dados ambíguos e estados incertos não autorizam repetição automática. O painel conectado é local e de um proprietário: consulta e altera dados reais com confirmação. Os resumos dependem da disponibilidade do modelo; falhas usam uma alternativa factual identificada. Marcações do checklist ficam só na sessão.
 
 ## Entrega
 
-Etapas 1–14 e 16 concluídas no escopo documentado. Vídeo demonstrativo enviado ao recrutador em 26/10/2026; a revisão de reagendamentos foi feita após essa gravação. [Roteiro curto](docs/roteiro-video.md) · [Fechamento da qualidade](docs/fechamento-etapa-16.md).
+Etapas 1–16 concluídas no escopo documentado, incluindo o painel local e a demonstração isolada. Vídeo demonstrativo enviado ao recrutador em 26/10/2026; a revisão de reagendamentos foi feita após essa gravação. [Roteiro histórico](docs/roteiro-video.md) · [Fechamento da qualidade](docs/fechamento-etapa-16.md) · [Apresentação do painel](docs/apresentacao-painel.md).
